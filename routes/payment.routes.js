@@ -1,0 +1,397 @@
+const express = require('express');
+const { body, validationResult } = require('express-validator');
+const { PrismaClient } = require('@prisma/client');
+const { authenticateToken, canManageAccounting } = require('../middleware/auth.middleware');
+
+const router = express.Router();
+const prisma = new PrismaClient();
+
+// Validation rules
+const validatePayment = [
+  body('studentId').isUUID().withMessage('ID de estudiante inválido'),
+  body('amount').isFloat({ min: 0.01 }).withMessage('Monto debe ser mayor a 0'),
+  body('method').isIn(['CASH', 'BANK_TRANSFER', 'CARD', 'CHECK', 'OTHER']).withMessage('Método de pago inválido'),
+  body('invoiceId').optional().isUUID().withMessage('ID de factura inválido'),
+  body('eventId').optional().isUUID().withMessage('ID de evento inválido')
+];
+
+// Get all payments with filters and pagination
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      status = '', 
+      studentId = '', 
+      method = '',
+      search = '',
+      startDate = '',
+      endDate = ''
+    } = req.query;
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Build where clause
+    const where = {};
+    
+    if (status) where.status = status;
+    if (studentId) where.studentId = studentId;
+    if (method) where.method = method;
+    
+    if (startDate || endDate) {
+      where.date = {};
+      if (startDate) where.date.gte = new Date(startDate);
+      if (endDate) where.date.lte = new Date(endDate);
+    }
+    
+    if (search) {
+      where.OR = [
+        { paymentNumber: { contains: search } },
+        { reference: { contains: search, mode: 'insensitive' } },
+        { student: { 
+          OR: [
+            { firstName: { contains: search, mode: 'insensitive' } },
+            { lastName: { contains: search, mode: 'insensitive' } },
+            { document: { contains: search } }
+          ]
+        }}
+      ];
+    }
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        include: { 
+          student: { 
+            select: { 
+              id: true, 
+              firstName: true, 
+              lastName: true, 
+              document: true,
+              grade: { select: { name: true } },
+              group: { select: { name: true } }
+            } 
+          },
+          invoice: {
+            select: {
+              invoiceNumber: true,
+              concept: true,
+              total: true
+            }
+          },
+          event: {
+            select: {
+              name: true,
+              type: true
+            }
+          },
+          user: { select: { name: true } }
+        },
+        orderBy: { date: 'desc' },
+        skip,
+        take: parseInt(limit)
+      }),
+      prisma.payment.count({ where })
+    ]);
+
+    res.json({
+      payments,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (error) {
+    console.error('Payments fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener pagos' });
+  }
+});
+
+// Get single payment
+router.get('/:id', authenticateToken, async (req, res) => {
+  try {
+    const payment = await prisma.payment.findUnique({
+      where: { id: req.params.id },
+      include: {
+        student: {
+          include: {
+            grade: { select: { name: true } },
+            group: { select: { name: true } }
+          }
+        },
+        invoice: {
+          include: {
+            items: true
+          }
+        },
+        event: true,
+        user: { select: { name: true } }
+      }
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+
+    res.json(payment);
+  } catch (error) {
+    console.error('Payment fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener pago' });
+  }
+});
+
+// Create payment
+router.post('/', authenticateToken, canManageAccounting, validatePayment, async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { invoiceId, eventId, ...paymentData } = req.body;
+
+    // Generate payment number
+    const lastPayment = await prisma.payment.findFirst({
+      orderBy: { paymentNumber: 'desc' }
+    });
+    
+    const nextNumber = lastPayment 
+      ? parseInt(lastPayment.paymentNumber.split('-')[2]) + 1 
+      : 1;
+    
+    const paymentNumber = `PAG-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+
+    // Start transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create payment
+      const payment = await tx.payment.create({
+        data: {
+          ...paymentData,
+          paymentNumber,
+          userId: req.user.id,
+          date: new Date(),
+          status: 'COMPLETED',
+          invoiceId: invoiceId || null,
+          eventId: eventId || null
+        },
+        include: { 
+          student: {
+            select: {
+              firstName: true,
+              lastName: true,
+              document: true
+            }
+          },
+          invoice: {
+            select: {
+              invoiceNumber: true,
+              total: true
+            }
+          }
+        }
+      });
+
+      // Update invoice status if payment is for an invoice
+      if (invoiceId) {
+        const invoice = await tx.invoice.findUnique({
+          where: { id: invoiceId },
+          include: { payments: true }
+        });
+
+        if (invoice) {
+          const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0) + paymentData.amount;
+          
+          let newStatus = 'PENDING';
+          if (totalPaid >= invoice.total) {
+            newStatus = 'PAID';
+          } else if (totalPaid > 0) {
+            newStatus = 'PARTIAL';
+          }
+
+          await tx.invoice.update({
+            where: { id: invoiceId },
+            data: { status: newStatus }
+          });
+        }
+      }
+
+      return payment;
+    });
+    
+    res.status(201).json(result);
+  } catch (error) {
+    console.error('Payment creation error:', error);
+    res.status(500).json({ error: 'Error al crear pago' });
+  }
+});
+
+// Update payment
+router.put('/:id', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const payment = await prisma.payment.update({
+      where: { id: req.params.id },
+      data: req.body,
+      include: { 
+        student: {
+          select: {
+            firstName: true,
+            lastName: true,
+            document: true
+          }
+        },
+        invoice: {
+          select: {
+            invoiceNumber: true,
+            total: true
+          }
+        }
+      }
+    });
+
+    res.json(payment);
+  } catch (error) {
+    console.error('Payment update error:', error);
+    res.status(500).json({ error: 'Error al actualizar pago' });
+  }
+});
+
+// Cancel payment
+router.patch('/:id/cancel', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Get payment details
+      const payment = await tx.payment.findUnique({
+        where: { id: req.params.id },
+        include: { invoice: true }
+      });
+
+      if (!payment) {
+        throw new Error('Pago no encontrado');
+      }
+
+      if (payment.status === 'CANCELLED') {
+        throw new Error('El pago ya está cancelado');
+      }
+
+      // Cancel payment
+      const updatedPayment = await tx.payment.update({
+        where: { id: req.params.id },
+        data: { 
+          status: 'CANCELLED',
+          observations: req.body.reason || 'Pago cancelado'
+        }
+      });
+
+      // Update invoice status if applicable
+      if (payment.invoiceId) {
+        const invoice = await tx.invoice.findUnique({
+          where: { id: payment.invoiceId },
+          include: { 
+            payments: {
+              where: { 
+                status: { not: 'CANCELLED' }
+              }
+            }
+          }
+        });
+
+        if (invoice) {
+          const totalPaid = invoice.payments.reduce((sum, p) => sum + p.amount, 0);
+          
+          let newStatus = 'PENDING';
+          if (totalPaid >= invoice.total) {
+            newStatus = 'PAID';
+          } else if (totalPaid > 0) {
+            newStatus = 'PARTIAL';
+          }
+
+          await tx.invoice.update({
+            where: { id: payment.invoiceId },
+            data: { status: newStatus }
+          });
+        }
+      }
+
+      return updatedPayment;
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error('Payment cancellation error:', error);
+    res.status(500).json({ error: error.message || 'Error al cancelar pago' });
+  }
+});
+
+// Get payment statistics
+router.get('/stats/summary', authenticateToken, async (req, res) => {
+  try {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    const [
+      totalPayments,
+      todayPayments,
+      monthPayments,
+      totalAmount,
+      todayAmount,
+      monthAmount,
+      paymentsByMethod
+    ] = await Promise.all([
+      prisma.payment.count({ where: { status: 'COMPLETED' } }),
+      prisma.payment.count({ 
+        where: { 
+          status: 'COMPLETED',
+          date: { gte: startOfDay }
+        } 
+      }),
+      prisma.payment.count({ 
+        where: { 
+          status: 'COMPLETED',
+          date: { gte: startOfMonth }
+        } 
+      }),
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { status: 'COMPLETED' }
+      }),
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { 
+          status: 'COMPLETED',
+          date: { gte: startOfDay }
+        }
+      }),
+      prisma.payment.aggregate({
+        _sum: { amount: true },
+        where: { 
+          status: 'COMPLETED',
+          date: { gte: startOfMonth }
+        }
+      }),
+      prisma.payment.groupBy({
+        by: ['method'],
+        _count: { method: true },
+        _sum: { amount: true },
+        where: { status: 'COMPLETED' }
+      })
+    ]);
+
+    res.json({
+      totalPayments,
+      todayPayments,
+      monthPayments,
+      totalAmount: totalAmount._sum.amount || 0,
+      todayAmount: todayAmount._sum.amount || 0,
+      monthAmount: monthAmount._sum.amount || 0,
+      paymentsByMethod
+    });
+  } catch (error) {
+    console.error('Payment stats error:', error);
+    res.status(500).json({ error: 'Error al obtener estadísticas' });
+  }
+});
+
+module.exports = router;

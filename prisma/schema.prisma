@@ -1,0 +1,432 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Institution Model
+model Institution {
+  id         String   @id @default(uuid())
+  name       String
+  nit        String   @unique
+  address    String
+  city       String
+  state      String
+  locality   String
+  phone      String
+  email      String
+  dane       String   @unique
+  resolution String
+  levels     String
+  title      String
+  calendar   String
+  schedule   String
+  logo       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+// User Model
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          UserRole
+  isActive      Boolean   @default(true)
+  isVerified    Boolean   @default(false)
+  lastLogin     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  transactions  Transaction[]
+  events        Event[]
+  invoices      Invoice[]
+  payments      Payment[]
+}
+
+enum UserRole {
+  RECTOR
+  SECRETARY
+  TEACHER
+  AUXILIARY_ACCOUNTANT
+  ACCOUNTANT
+  ADMIN
+}
+
+// Student Model
+model Student {
+  id           String        @id @default(uuid())
+  documentType DocumentType
+  document     String        @unique
+  firstName    String
+  lastName     String
+  birthDate    DateTime
+  gender       Gender
+  email        String?
+  phone        String?
+  address      String
+  gradeId      String
+  groupId      String
+  guardianName String?
+  guardianPhone String?
+  guardianEmail String?
+  status       StudentStatus @default(ACTIVE)
+  enrollmentDate DateTime    @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  // Relations
+  grade        Grade         @relation(fields: [gradeId], references: [id])
+  group        Group         @relation(fields: [groupId], references: [id])
+  enrollments  Enrollment[]
+  invoices     Invoice[]
+  payments     Payment[]
+  eventAssignments EventAssignment[]
+  attendances  Attendance[]
+}
+
+enum DocumentType {
+  TI  // Tarjeta de Identidad
+  RC  // Registro Civil
+  CC  // Cédula de Ciudadanía
+  CE  // Cédula de Extranjería
+  PP  // Pasaporte
+}
+
+enum Gender {
+  M  // Masculino
+  F  // Femenino
+  O  // Otro
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  TRANSFERRED
+  SUSPENDED
+}
+
+// Grade Model
+model Grade {
+  id        String    @id @default(uuid())
+  name      String
+  level     String
+  order     Int
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relations
+  students  Student[]
+  groups    Group[]
+}
+
+// Group Model - ACTUALIZADO CON CAMPOS FALTANTES
+model Group {
+  id          String    @id @default(uuid())
+  name        String
+  gradeId     String
+  capacity    Int       @default(30)
+  teacherName String?   // ← CAMPO AGREGADO
+  classroom   String?   // ← CAMPO AGREGADO
+  year        Int
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  grade       Grade     @relation(fields: [gradeId], references: [id])
+  students    Student[]
+}
+
+// Enrollment Model
+model Enrollment {
+  id          String           @id @default(uuid())
+  studentId   String
+  year        Int
+  gradeId     String
+  groupId     String
+  status      EnrollmentStatus @default(ACTIVE)
+  enrollDate  DateTime         @default(now())
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  
+  // Relations
+  student     Student          @relation(fields: [studentId], references: [id])
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  TRANSFERRED
+}
+
+// Event Model
+model Event {
+  id              String          @id @default(uuid())
+  name            String
+  type            EventType
+  description     String?
+  eventDate       DateTime
+  location        String?
+  ticketPrice     Float           @default(0)
+  fundraisingGoal Float           @default(0)
+  totalRaised     Float           @default(0)
+  responsible     String
+  responsibleId   String
+  status          EventStatus     @default(PLANNING)
+  
+  // Campos para asignación de grados/grupos específicos
+  targetGrades    String?         // JSON array de IDs de grados objetivo
+  targetGroups    String?         // JSON array de IDs de grupos objetivo
+  assignmentType  EventAssignmentType @default(MANUAL) // Tipo de asignación
+  
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  user            User            @relation(fields: [responsibleId], references: [id])
+  assignments     EventAssignment[]
+  payments        Payment[]
+}
+
+enum EventType {
+  RAFFLE
+  BINGO
+  GRADUATION
+  FESTIVAL
+  SPORTS
+  CULTURAL
+  FUNDRAISING
+  OTHER
+}
+
+enum EventStatus {
+  PLANNING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum EventAssignmentType {
+  MANUAL      // Asignación manual estudiante por estudiante
+  BY_GRADE    // Asignación automática por grado(s)
+  BY_GROUP    // Asignación automática por grupo(s)
+  MIXED       // Combinación de grados y grupos específicos
+}
+
+// Event Assignment Model
+model EventAssignment {
+  id            String    @id @default(uuid())
+  eventId       String
+  studentId     String
+  ticketsAssigned Int     @default(0)
+  ticketsSold   Int       @default(0)
+  amountRaised  Float     @default(0)
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  event         Event     @relation(fields: [eventId], references: [id])
+  student       Student   @relation(fields: [studentId], references: [id])
+  
+  @@unique([eventId, studentId])
+}
+
+// Account Model (Chart of Accounts)
+model Account {
+  id          String        @id @default(uuid())
+  code        String        @unique
+  name        String
+  type        AccountType
+  category    String
+  parent      String?
+  description String?
+  isActive    Boolean       @default(true)
+  balance     Float         @default(0)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  
+  // Relations
+  debits      Transaction[] @relation("DebitAccount")
+  credits     Transaction[] @relation("CreditAccount")
+}
+
+enum AccountType {
+  ASSET       // Activo
+  LIABILITY   // Pasivo
+  EQUITY      // Patrimonio
+  INCOME      // Ingreso
+  EXPENSE     // Gasto
+}
+
+// Transaction Model
+model Transaction {
+  id              String          @id @default(uuid())
+  date            DateTime
+  documentNumber  String          @unique
+  description     String
+  debitAccountId  String
+  creditAccountId String
+  amount          Float
+  reference       String?
+  userId          String
+  status          TransactionStatus @default(PENDING)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  // Relations
+  debitAccount    Account         @relation("DebitAccount", fields: [debitAccountId], references: [id])
+  creditAccount   Account         @relation("CreditAccount", fields: [creditAccountId], references: [id])
+  user            User            @relation(fields: [userId], references: [id])
+}
+
+enum TransactionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+// Invoice Model
+model Invoice {
+  id            String        @id @default(uuid())
+  invoiceNumber String        @unique
+  date          DateTime
+  dueDate       DateTime
+  studentId     String
+  concept       InvoiceConcept
+  subtotal      Float
+  tax           Float         @default(0)
+  total         Float
+  status        InvoiceStatus @default(PENDING)
+  observations  String?
+  userId        String
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  student       Student       @relation(fields: [studentId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+  items         InvoiceItem[]
+  payments      Payment[]
+}
+
+enum InvoiceConcept {
+  TUITION     // Matrícula
+  MONTHLY     // Mensualidad
+  EVENT       // Evento Escolar
+  UNIFORM     // Uniforme
+  BOOKS       // Libros
+  TRANSPORT   // Transporte
+  CAFETERIA   // Cafetería
+  OTHER       // Otro
+}
+
+enum InvoiceStatus {
+  PENDING     // Pendiente
+  PAID        // Pagada
+  PARTIAL     // Pago Parcial
+  OVERDUE     // Vencida
+  CANCELLED   // Anulada
+}
+
+// Invoice Item Model
+model InvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Int
+  unitPrice   Float
+  total       Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// Payment Model
+model Payment {
+  id            String        @id @default(uuid())
+  paymentNumber String        @unique
+  date          DateTime
+  studentId     String
+  invoiceId     String?
+  eventId       String?
+  amount        Float
+  method        PaymentMethod
+  reference     String?
+  observations  String?
+  userId        String
+  status        PaymentStatus @default(COMPLETED)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  student       Student       @relation(fields: [studentId], references: [id])
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
+  event         Event?        @relation(fields: [eventId], references: [id])
+  user          User          @relation(fields: [userId], references: [id])
+}
+
+enum PaymentMethod {
+  CASH          // Efectivo
+  BANK_TRANSFER // Transferencia
+  CARD          // Tarjeta
+  CHECK         // Cheque
+  OTHER         // Otro
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+  REFUNDED
+}
+
+// Attendance Model
+model Attendance {
+  id        String           @id @default(uuid())
+  studentId String
+  date      DateTime
+  status    AttendanceStatus
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  
+  // Relations
+  student   Student          @relation(fields: [studentId], references: [id])
+  
+  @@unique([studentId, date])
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+// Audit Log Model
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  action     String
+  entity     String
+  entityId   String
+  oldData    Json?
+  newData    Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+}

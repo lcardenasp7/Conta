@@ -95,3 +95,10 @@ test-*.html
 *-simple.js
 *-final.js
 *-clean.js
+
+# Railway
+.railway/
+
+# Production logs
+logs/
+*.log

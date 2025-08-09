@@ -6,6 +6,10 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 const { PrismaClient } = require('@prisma/client');
 
+// Railway-specific configurations
+const isProduction = process.env.NODE_ENV === 'production';
+const isRailway = process.env.RAILWAY_ENVIRONMENT_NAME !== undefined;
+
 // Import routes
 const authRoutes = require('./routes/auth.routes');
 const institutionRoutes = require('./routes/institution.routes');

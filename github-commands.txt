@@ -1,0 +1,28 @@
+🚀 COMANDOS PARA SUBIR A GITHUB
+================================
+
+1. Primero crea el repositorio en GitHub.com con el nombre:
+   sistema-villas-san-pablo
+
+2. Luego ejecuta estos comandos (reemplaza TU-USUARIO):
+
+git remote add origin https://github.com/TU-USUARIO/sistema-villas-san-pablo.git
+git branch -M main
+git push -u origin main
+
+3. Si ya tienes un remote origin configurado, primero elimínalo:
+git remote remove origin
+
+4. Luego ejecuta los comandos del paso 2.
+
+✅ VERIFICACIÓN:
+- Ve a tu repositorio en GitHub
+- Deberías ver todos los archivos
+- README.md se mostrará automáticamente
+- Verifica que aparezcan los 2 commits
+
+🎯 RESULTADO ESPERADO:
+- Repositorio público/privado en GitHub
+- Documentación completa visible
+- Código fuente accesible
+- Listo para colaboración o despliegue

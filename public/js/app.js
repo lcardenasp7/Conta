@@ -665,8 +665,8 @@ async function loadPage(pageName) {
         
         // Initialize page-specific functionality
         await initializePage(pageName);
-    } else if (pageName === 'events') {
-        // Handle events page specially
+    } else if (pageName === 'events' || pageName === 'event-assignments' || pageName === 'event-reports') {
+        // Handle events pages specially
         currentAppPage = pageName;
         await initializePage(pageName);
     } else {
@@ -759,31 +759,53 @@ async function initializePage(pageName) {
                 }
                 break;
             case 'event-assignments':
-                // Redirect to events page with assignments tab
+                // Load events page and switch to assignments tab
+                console.log('🔄 Loading event-assignments page...');
+                console.log('initEvents available:', typeof initEvents);
+                
                 if (typeof initEvents === 'function') {
+                    console.log('✅ Initializing events module...');
                     await initEvents();
-                    // Could implement tab switching here
+                    console.log('✅ Events module initialized, switching to assignments tab...');
+                    // Switch to assignments tab after initialization
+                    switchToEventsTab('assignments');
                 } else {
+                    console.error('❌ initEvents function not available');
                     document.getElementById('contentArea').innerHTML = `
                         <div class="text-center py-5">
                             <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
                             <h3 class="mt-3">Módulo de Eventos no disponible</h3>
                             <p class="text-muted">Para gestionar asignaciones, necesitas el módulo de eventos.</p>
+                            <p class="text-muted"><small>initEvents type: ${typeof initEvents}</small></p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
                         </div>
                     `;
                 }
                 break;
             case 'event-reports':
-                // Redirect to events page with reports tab
+                // Load events page and switch to reports tab
+                console.log('🔄 Loading event-reports page...');
+                console.log('initEvents available:', typeof initEvents);
+                
                 if (typeof initEvents === 'function') {
+                    console.log('✅ Initializing events module...');
                     await initEvents();
-                    // Could implement tab switching here
+                    console.log('✅ Events module initialized, switching to reports tab...');
+                    // Switch to reports tab after initialization
+                    switchToEventsTab('reports');
                 } else {
+                    console.error('❌ initEvents function not available');
                     document.getElementById('contentArea').innerHTML = `
                         <div class="text-center py-5">
                             <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
                             <h3 class="mt-3">Módulo de Eventos no disponible</h3>
                             <p class="text-muted">Para ver reportes de eventos, necesitas el módulo de eventos.</p>
+                            <p class="text-muted"><small>initEvents type: ${typeof initEvents}</small></p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
                         </div>
                     `;
                 }
@@ -853,10 +875,75 @@ function initApp() {
     }
 }
 
+// Switch to specific events tab
+function switchToEventsTab(tabName) {
+    // Función para intentar el cambio de tab
+    const attemptTabSwitch = (attempt = 1, maxAttempts = 10) => {
+        let tabId, tabTarget;
+        
+        switch (tabName) {
+            case 'assignments':
+                tabId = 'events-assignments-tab';
+                tabTarget = '#events-assignments';
+                break;
+            case 'reports':
+                tabId = 'events-reports-tab';
+                tabTarget = '#events-reports';
+                break;
+            default:
+                tabId = 'events-list-tab';
+                tabTarget = '#events-list';
+        }
+        
+        // Verificar si los elementos existen
+        const targetTab = document.getElementById(tabId);
+        const targetPane = document.querySelector(tabTarget);
+        
+        if (targetTab && targetPane) {
+            // Remove active class from all tabs
+            const allTabs = document.querySelectorAll('#eventsTab .nav-link');
+            const allPanes = document.querySelectorAll('#eventsTabContent .tab-pane');
+            
+            allTabs.forEach(tab => {
+                tab.classList.remove('active');
+                tab.setAttribute('aria-selected', 'false');
+            });
+            
+            allPanes.forEach(pane => {
+                pane.classList.remove('show', 'active');
+            });
+            
+            // Activate target tab
+            targetTab.classList.add('active');
+            targetTab.setAttribute('aria-selected', 'true');
+            targetPane.classList.add('show', 'active');
+            
+            // Initialize the corresponding module immediately
+            if (tabName === 'assignments' && typeof initEventAssignments === 'function') {
+                initEventAssignments();
+            } else if (tabName === 'reports' && typeof initEventReports === 'function') {
+                initEventReports();
+            }
+            
+            console.log(`✅ Switched to events ${tabName} tab (attempt ${attempt})`);
+        } else if (attempt < maxAttempts) {
+            // Si los elementos no existen, intentar de nuevo en 50ms
+            console.log(`⏳ Tab elements not ready, retrying... (attempt ${attempt}/${maxAttempts})`);
+            setTimeout(() => attemptTabSwitch(attempt + 1, maxAttempts), 50);
+        } else {
+            console.warn(`⚠️ Could not find tab elements for ${tabName} after ${maxAttempts} attempts`);
+        }
+    };
+    
+    // Intentar inmediatamente, luego con pequeños delays si es necesario
+    attemptTabSwitch();
+}
+
 // Make functions globally available
 window.loadPage = loadPage;
 window.toggleSubmenu = toggleSubmenu;
 window.toggleSidebar = toggleSidebar;
+window.switchToEventsTab = switchToEventsTab;
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {

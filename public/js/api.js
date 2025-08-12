@@ -119,6 +119,18 @@ class API {
         return this.get('/dashboard/stats');
     }
 
+    async getDashboardActivities() {
+        return this.get('/dashboard/recent-activities');
+    }
+
+    async getMonthlyIncomeChart(year = new Date().getFullYear()) {
+        return this.get(`/dashboard/charts/monthly-income?year=${year}`);
+    }
+
+    async getStudentsByGradeChart() {
+        return this.get('/dashboard/charts/students-by-grade');
+    }
+
     // Students endpoints
     async getStudents(params = {}) {
         const queryString = new URLSearchParams(params).toString();
@@ -127,6 +139,19 @@ class API {
 
     async getStudent(id) {
         return this.get(`/students/${id}`);
+    }
+
+    async searchStudents(query) {
+        const response = await this.get(`/students?search=${encodeURIComponent(query)}&limit=20`);
+        return response.students || response || [];
+    }
+
+    async getStudentInvoices(studentId) {
+        return this.get(`/invoices?studentId=${studentId}`);
+    }
+
+    async getStudentEventAssignments(studentId) {
+        return this.get(`/events/assignments?studentId=${studentId}`);
     }
 
     async createStudent(data) {
@@ -218,6 +243,26 @@ class API {
         return this.post('/invoices/bulk', data);
     }
 
+    async generateMonthlyInvoices(data) {
+        return this.post('/invoices/generate/monthly', data);
+    }
+
+    async generateEventInvoices(eventId) {
+        return this.post(`/invoices/generate/event/${eventId}`);
+    }
+
+    async getInvoiceTemplates() {
+        return this.get('/invoices/templates');
+    }
+
+    async createExternalInvoice(data) {
+        return this.post('/invoices/external', data);
+    }
+
+    async createStudentInvoice(data) {
+        return this.post('/invoices/student', data);
+    }
+
     // Debts endpoints
     async getDebts(params = {}) {
         const queryString = new URLSearchParams(params).toString();
@@ -299,6 +344,10 @@ class API {
         return this.post(`/events/${eventId}/assignments`, data);
     }
 
+    async createBulkEventAssignment(eventId, data) {
+        return this.post(`/events/${eventId}/assignments/bulk`, data);
+    }
+
     async createBulkEventAssignments(eventId, data) {
         return this.post(`/events/${eventId}/assignments/bulk`, data);
     }
@@ -318,6 +367,34 @@ class API {
 
     async createEventPayment(eventId, data) {
         return this.post(`/events/${eventId}/payments`, data);
+    }
+
+    // Get all event assignments (for reports)
+    async getAllEventAssignments(filters = {}) {
+        // Filter out null/undefined values
+        const cleanFilters = {};
+        Object.keys(filters).forEach(key => {
+            if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+                cleanFilters[key] = filters[key];
+            }
+        });
+        
+        const queryString = new URLSearchParams(cleanFilters).toString();
+        return this.get(`/events/assignments/all${queryString ? '?' + queryString : ''}`);
+    }
+
+    // Get all event payments (for reports)
+    async getAllEventPayments(filters = {}) {
+        // Filter out null/undefined values
+        const cleanFilters = {};
+        Object.keys(filters).forEach(key => {
+            if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+                cleanFilters[key] = filters[key];
+            }
+        });
+        
+        const queryString = new URLSearchParams(cleanFilters).toString();
+        return this.get(`/events/payments/all${queryString ? '?' + queryString : ''}`);
     }
 
     // Reports endpoints

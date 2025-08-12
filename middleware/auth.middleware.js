@@ -2,7 +2,23 @@ const jwt = require('jsonwebtoken');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Verificar que JWT_SECRET esté configurado
+if (!JWT_SECRET) {
+  console.error('❌ CRITICAL: JWT_SECRET no está configurado en las variables de entorno');
+  console.error('   Ejecuta: node scripts/generate-jwt-secret.js');
+  process.exit(1);
+}
+
+if (JWT_SECRET === 'your-secret-key-change-in-production' || JWT_SECRET.length < 32) {
+  console.error('❌ CRITICAL: JWT_SECRET no es seguro para producción');
+  console.error('   Debe tener al menos 32 caracteres');
+  console.error('   Ejecuta: node scripts/generate-jwt-secret.js');
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
+}
 
 // Verify JWT token
 const authenticateToken = async (req, res, next) => {

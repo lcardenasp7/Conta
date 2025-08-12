@@ -42,6 +42,8 @@ model User {
   isActive      Boolean   @default(true)
   isVerified    Boolean   @default(false)
   lastLogin     DateTime?
+  resetToken    String?   // Token para reset de contraseña
+  resetTokenExpiry DateTime? // Expiración del token
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
@@ -206,6 +208,7 @@ enum EventType {
   SPORTS
   CULTURAL
   FUNDRAISING
+  GRADUATION_FEE
   OTHER
 }
 
@@ -301,27 +304,51 @@ enum TransactionStatus {
 model Invoice {
   id            String        @id @default(uuid())
   invoiceNumber String        @unique
-  date          DateTime
+  date          DateTime      @default(now())
   dueDate       DateTime
-  studentId     String
+  studentId     String?       // Optional for external invoices
   concept       InvoiceConcept
-  subtotal      Float
+  subtotal      Float         @default(0)
   tax           Float         @default(0)
   total         Float
   status        InvoiceStatus @default(PENDING)
   observations  String?
   userId        String
+  
+  // Invoice type and direction
+  type          InvoiceType   @default(OUTGOING) // OUTGOING (emitimos) o INCOMING (recibimos)
+  
+  // External client fields (for outgoing invoices)
+  isExternal    Boolean       @default(false)
+  clientName    String?
+  clientDocument String?
+  clientEmail   String?
+  clientPhone   String?
+  
+  // Supplier fields (for incoming invoices)
+  supplierName     String?
+  supplierDocument String?
+  supplierEmail    String?
+  supplierPhone    String?
+  supplierAddress  String?
+  
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   
   // Relations
-  student       Student       @relation(fields: [studentId], references: [id])
+  student       Student?      @relation(fields: [studentId], references: [id])
   user          User          @relation(fields: [userId], references: [id])
   items         InvoiceItem[]
   payments      Payment[]
 }
 
+enum InvoiceType {
+  OUTGOING    // Facturas que emitimos (a estudiantes/clientes)
+  INCOMING    // Facturas que recibimos (de proveedores)
+}
+
 enum InvoiceConcept {
+  // Conceptos para facturas emitidas (OUTGOING)
   TUITION     // Matrícula
   MONTHLY     // Mensualidad
   EVENT       // Evento Escolar
@@ -329,6 +356,20 @@ enum InvoiceConcept {
   BOOKS       // Libros
   TRANSPORT   // Transporte
   CAFETERIA   // Cafetería
+  
+  // Conceptos para facturas recibidas (INCOMING)
+  OFFICE_SUPPLIES    // Útiles de oficina
+  MAINTENANCE        // Mantenimiento
+  UTILITIES          // Servicios públicos
+  PROFESSIONAL_SERVICES // Servicios profesionales
+  EQUIPMENT          // Equipos
+  CLEANING_SUPPLIES  // Insumos de aseo
+  FOOD_SUPPLIES      // Insumos de cafetería
+  EDUCATIONAL_MATERIALS // Material educativo
+  TECHNOLOGY         // Tecnología
+  INSURANCE          // Seguros
+  RENT               // Arrendamiento
+  
   OTHER       // Otro
 }
 

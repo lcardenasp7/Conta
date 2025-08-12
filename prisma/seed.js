@@ -82,8 +82,8 @@ async function main() {
             data: gradeData
         });
 
-        // Create groups for each grade
-        const groups = ['A', 'B', 'C'];
+        // Create groups for each grade with numeric format
+        const groups = ['01', '02', '03', '04', '05', '06'];
         for (const groupName of groups) {
             await prisma.group.create({
                 data: {

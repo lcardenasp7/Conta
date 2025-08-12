@@ -135,20 +135,31 @@ async function importStudents() {
                 const gender = studentRow['GENERO'] || studentRow['SEXO'] || studentRow['GENDER'] || 'M';
                 const address = studentRow['DIRECCION'] || studentRow['ADDRESS'] || 'Dirección por actualizar';
                 
-                // Parse full name into first and last names
-                let firstName = '';
-                let lastName = '';
+                // Extract names and surnames from separate columns
+                const firstName = studentRow['NOMBRES'] || studentRow['PRIMER_NOMBRE'] || '';
+                const lastName = studentRow['APELLIDOS'] || studentRow['PRIMER_APELLIDO'] || '';
                 
-                if (fullName) {
+                // If names are in a single column, parse them
+                let finalFirstName = firstName;
+                let finalLastName = lastName;
+                
+                if (!firstName && !lastName && fullName) {
                     const nameParts = fullName.toString().trim().split(' ');
-                    if (nameParts.length >= 2) {
-                        // Take first 2 parts as first name, rest as last name
-                        firstName = nameParts.slice(0, 2).join(' ');
-                        lastName = nameParts.slice(2).join(' ') || nameParts[1];
+                    if (nameParts.length >= 4) {
+                        // Assume first 2 are first names, last 2 are last names
+                        finalFirstName = nameParts.slice(0, 2).join(' ');
+                        finalLastName = nameParts.slice(2).join(' ');
+                    } else if (nameParts.length >= 2) {
+                        // Take first part as first name, rest as last name
+                        finalFirstName = nameParts[0];
+                        finalLastName = nameParts.slice(1).join(' ');
                     } else {
-                        firstName = nameParts[0] || '';
-                        lastName = nameParts[1] || 'APELLIDO';
+                        finalFirstName = nameParts[0] || '';
+                        finalLastName = 'APELLIDO';
                     }
+                } else {
+                    finalFirstName = firstName.toString().trim();
+                    finalLastName = lastName.toString().trim();
                 }
                 
                 // Validate required fields and document format
@@ -174,8 +185,11 @@ async function importStudents() {
                     continue;
                 }
                 
-                // Generate email
-                const email = generateEmail(firstName, lastName, numericDocument);
+                // Use existing email or generate new one
+                let email = studentRow['EMAIL'] || studentRow['CORREO'] || studentRow['CORREO_ELECTRONICO'] || '';
+                if (!email) {
+                    email = generateEmail(finalFirstName, finalLastName, numericDocument);
+                }
                 
                 // Generate random phone
                 const phone = generateRandomPhone();
@@ -191,21 +205,15 @@ async function importStudents() {
                     continue;
                 }
                 
-                // Map course number to group letter (01->A, 02->B, 03->C, etc.)
-                let groupLetter = 'A';
-                if (groupName) {
-                    const courseNum = parseInt(groupName.toString());
-                    if (courseNum >= 1 && courseNum <= 6) {
-                        groupLetter = String.fromCharCode(64 + courseNum); // 1->A, 2->B, 3->C, etc.
-                    }
-                }
+                // Use the actual group number from the file
+                let actualGroupName = groupName ? groupName.toString().padStart(2, '0') : '01';
                 
-                console.log(`📝 Procesando: ${fullName} - Grado: ${gradeName} (${mappedGradeName}) - Curso: ${groupName} (${groupLetter})`);
+                console.log(`📝 Procesando: ${finalFirstName} ${finalLastName} - Grado: ${gradeName} (${mappedGradeName}) - Grupo: ${actualGroupName}`);
                 
-                // Find group in grade
-                const group = grade.groups.find(g => g.name === groupLetter) || grade.groups[0];
+                // Find group in grade by the actual group number
+                const group = grade.groups.find(g => g.name === actualGroupName) || grade.groups[0];
                 if (!group) {
-                    console.log(`⚠️  Grupo no encontrado: ${groupLetter} en grado ${grade.name}`);
+                    console.log(`⚠️  Grupo no encontrado: ${actualGroupName} en grado ${grade.name}`);
                     errors++;
                     continue;
                 }
@@ -227,7 +235,7 @@ async function importStudents() {
                 });
                 
                 if (existingStudent) {
-                    console.log(`⚠️  Estudiante ya existe: ${firstName} ${lastName} (${document})`);
+                    console.log(`⚠️  Estudiante ya existe: ${finalFirstName} ${finalLastName} (${document})`);
                     continue;
                 }
                 
@@ -236,8 +244,8 @@ async function importStudents() {
                     data: {
                         documentType: 'TI', // Default to TI, can be updated later
                         document: numericDocument,
-                        firstName: firstName.toString().trim(),
-                        lastName: lastName.toString().trim(),
+                        firstName: finalFirstName.toString().trim(),
+                        lastName: finalLastName.toString().trim(),
                         birthDate: parsedBirthDate,
                         gender: gender.toString().toUpperCase().startsWith('F') ? 'F' : 'M',
                         email: email,
@@ -260,7 +268,7 @@ async function importStudents() {
                     }
                 });
                 
-                console.log(`✅ Importado: ${firstName} ${lastName} - ${email} - ${grade.name} ${group.name}`);
+                console.log(`✅ Importado: ${finalFirstName} ${finalLastName} - ${email} - ${grade.name} ${group.name}`);
                 imported++;
                 
             } catch (error) {

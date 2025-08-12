@@ -2,14 +2,21 @@ const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken, canManageAccounting } = require('../middleware/auth.middleware');
+const invoiceGeneratorService = require('../services/invoice-generator.service');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
 // Validation rules
 const validateInvoice = [
-  body('studentId').isUUID().withMessage('ID de estudiante inválido'),
-  body('concept').isIn(['TUITION', 'MONTHLY', 'EVENT', 'UNIFORM', 'BOOKS', 'TRANSPORT', 'CAFETERIA', 'OTHER']).withMessage('Concepto inválido'),
+  body('studentId').optional().isUUID().withMessage('ID de estudiante inválido'),
+  body('concept').isIn([
+    'TUITION', 'MONTHLY', 'EVENT', 'UNIFORM', 'BOOKS', 'TRANSPORT', 'CAFETERIA',
+    'OFFICE_SUPPLIES', 'MAINTENANCE', 'UTILITIES', 'PROFESSIONAL_SERVICES', 
+    'EQUIPMENT', 'CLEANING_SUPPLIES', 'FOOD_SUPPLIES', 'EDUCATIONAL_MATERIALS',
+    'TECHNOLOGY', 'INSURANCE', 'RENT', 'OTHER'
+  ]).withMessage('Concepto inválido'),
+  body('type').optional().isIn(['OUTGOING', 'INCOMING']).withMessage('Tipo de factura inválido'),
   body('dueDate').isISO8601().withMessage('Fecha de vencimiento inválida'),
   body('items').isArray({ min: 1 }).withMessage('Debe incluir al menos un item'),
   body('items.*.description').notEmpty().withMessage('Descripción del item requerida'),
@@ -26,6 +33,7 @@ router.get('/', authenticateToken, async (req, res) => {
       status = '', 
       studentId = '', 
       concept = '',
+      type = 'OUTGOING',
       search = ''
     } = req.query;
 
@@ -37,6 +45,7 @@ router.get('/', authenticateToken, async (req, res) => {
     if (status) where.status = status;
     if (studentId) where.studentId = studentId;
     if (concept) where.concept = concept;
+    if (type) where.type = type;
     
     if (search) {
       where.OR = [
@@ -379,95 +388,85 @@ router.post('/', authenticateToken, canManageAccounting, validateInvoice, async 
   }
 });
 
-// Create bulk invoices
+// Create bulk invoices - MEJORADO
 router.post('/bulk', authenticateToken, canManageAccounting, async (req, res) => {
   try {
-    const { gradeId, concept, description, amount, dueDate } = req.body;
+    const { gradeIds = [], groupIds = [], concept, description, amount, dueDate, includeInactive = false } = req.body;
     
-    if (!gradeId || !concept || !description || !amount || !dueDate) {
+    if ((!gradeIds.length && !groupIds.length) || !concept || !description || !amount || !dueDate) {
       return res.status(400).json({ error: 'Todos los campos son requeridos' });
     }
-    
-    // Get all active students in the grade
-    const students = await prisma.student.findMany({
-      where: {
-        gradeId,
-        status: 'ACTIVE'
-      },
-      include: {
-        grade: { select: { name: true } },
-        group: { select: { name: true } }
-      }
-    });
-    
-    if (students.length === 0) {
-      return res.status(400).json({ error: 'No se encontraron estudiantes activos en el grado seleccionado' });
-    }
-    
-    // Get last invoice number for sequential numbering
-    const lastInvoice = await prisma.invoice.findFirst({
-      orderBy: { invoiceNumber: 'desc' }
-    });
-    
-    let nextNumber = lastInvoice 
-      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
-      : 1;
-    
-    const year = new Date().getFullYear();
-    const invoices = [];
-    
-    // Create invoices in transaction
-    await prisma.$transaction(async (tx) => {
-      for (const student of students) {
-        const invoiceNumber = `FAC-${year}-${nextNumber.toString().padStart(6, '0')}`;
-        
-        const invoice = await tx.invoice.create({
-          data: {
-            invoiceNumber,
-            studentId: student.id,
-            concept,
-            date: new Date(),
-            dueDate: new Date(dueDate),
-            subtotal: amount,
-            tax: 0, // Educational services are exempt from VAT
-            total: amount,
-            status: 'PENDING',
-            userId: req.user.id,
-            items: {
-              create: [{
-                description,
-                quantity: 1,
-                unitPrice: amount,
-                total: amount
-              }]
-            }
-          },
-          include: {
-            student: {
-              select: {
-                firstName: true,
-                lastName: true,
-                document: true
-              }
-            },
-            items: true
-          }
-        });
-        
-        invoices.push(invoice);
-        nextNumber++;
-      }
+
+    const result = await invoiceGeneratorService.generateBulkInvoices({
+      gradeIds,
+      groupIds,
+      concept,
+      description,
+      amount,
+      dueDate,
+      userId: req.user.id,
+      includeInactive
     });
     
     res.status(201).json({
-      message: `Se crearon ${invoices.length} facturas exitosamente`,
-      count: invoices.length,
-      invoices: invoices.slice(0, 5) // Return first 5 as sample
+      message: `Se crearon ${result.count} facturas exitosamente`,
+      ...result
     });
     
   } catch (error) {
     console.error('Bulk invoice creation error:', error);
-    res.status(500).json({ error: 'Error al crear facturas masivas' });
+    res.status(500).json({ error: error.message || 'Error al crear facturas masivas' });
+  }
+});
+
+// Generate monthly invoices - NUEVO
+router.post('/generate/monthly', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const { month, year, baseAmount, gradeSpecificAmounts = {} } = req.body;
+    
+    if (!month || !year || !baseAmount) {
+      return res.status(400).json({ error: 'Mes, año y monto base son requeridos' });
+    }
+
+    const result = await invoiceGeneratorService.generateMonthlyInvoices({
+      month: parseInt(month),
+      year: parseInt(year),
+      baseAmount: parseFloat(baseAmount),
+      gradeSpecificAmounts,
+      userId: req.user.id
+    });
+    
+    res.status(201).json(result);
+    
+  } catch (error) {
+    console.error('Monthly invoice generation error:', error);
+    res.status(500).json({ error: error.message || 'Error al generar facturas mensuales' });
+  }
+});
+
+// Generate event invoices - NUEVO
+router.post('/generate/event/:eventId', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const { eventId } = req.params;
+    
+    const result = await invoiceGeneratorService.generateEventInvoices(eventId, req.user.id);
+    
+    res.status(201).json(result);
+    
+  } catch (error) {
+    console.error('Event invoice generation error:', error);
+    res.status(500).json({ error: error.message || 'Error al generar facturas de evento' });
+  }
+});
+
+// Get invoice templates - NUEVO
+router.get('/templates', authenticateToken, async (req, res) => {
+  try {
+    const templates = await invoiceGeneratorService.getInvoiceTemplates();
+    res.json(templates);
+  } catch (error) {
+    console.error('Invoice templates error:', error);
+    res.status(500).json({ error: 'Error al obtener plantillas' });
   }
 });
 
@@ -553,6 +552,200 @@ router.delete('/:id', authenticateToken, canManageAccounting, async (req, res) =
   } catch (error) {
     console.error('Invoice deletion error:', error);
     res.status(500).json({ error: 'Error al eliminar factura' });
+  }
+});
+
+// Generate invoice for student events
+router.post('/student', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const { studentId, concept, observations, assignmentIds } = req.body;
+
+    // Validate required fields
+    if (!studentId || !assignmentIds || assignmentIds.length === 0) {
+      return res.status(400).json({ error: 'Datos requeridos faltantes' });
+    }
+
+    // Get student data
+    const student = await prisma.student.findUnique({
+      where: { id: studentId },
+      include: {
+        grade: { select: { name: true } },
+        group: { select: { name: true } }
+      }
+    });
+
+    if (!student) {
+      return res.status(404).json({ error: 'Estudiante no encontrado' });
+    }
+
+    // Get assignments data
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { 
+        id: { in: assignmentIds },
+        studentId: studentId
+      },
+      include: {
+        event: {
+          select: {
+            name: true,
+            ticketPrice: true
+          }
+        }
+      }
+    });
+
+    if (assignments.length === 0) {
+      return res.status(404).json({ error: 'No se encontraron asignaciones válidas' });
+    }
+
+    // Generate invoice number
+    const lastInvoice = await prisma.invoice.findFirst({
+      orderBy: { invoiceNumber: 'desc' }
+    });
+    
+    const nextNumber = lastInvoice 
+      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
+      : 1;
+    
+    const invoiceNumber = `FAC-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+
+    // Calculate items and total
+    const items = assignments.map(assignment => {
+      const pendingTickets = assignment.ticketsAssigned - assignment.ticketsSold;
+      const unitPrice = assignment.event.ticketPrice;
+      const total = pendingTickets * unitPrice;
+
+      return {
+        description: `${assignment.event.name} - Boletos`,
+        quantity: pendingTickets,
+        unitPrice: unitPrice,
+        total: total
+      };
+    });
+
+    const totalAmount = items.reduce((sum, item) => sum + item.total, 0);
+
+    // Create invoice in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create invoice
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          studentId,
+          concept: 'EVENT',
+          total: totalAmount,
+          status: 'PENDING',
+          dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+          observations: observations || null,
+          userId: req.user.id,
+          items: {
+            create: items
+          }
+        },
+        include: {
+          items: true,
+          student: {
+            select: {
+              firstName: true,
+              lastName: true,
+              document: true,
+              grade: { select: { name: true } },
+              group: { select: { name: true } }
+            }
+          }
+        }
+      });
+
+      return invoice;
+    });
+
+    res.status(201).json({
+      message: 'Factura generada exitosamente',
+      invoice: result
+    });
+
+  } catch (error) {
+    console.error('Student invoice generation error:', error);
+    res.status(500).json({ error: 'Error al generar factura del estudiante' });
+  }
+});
+
+// Generate external invoice
+router.post('/external', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const { 
+      clientName, 
+      clientDocument, 
+      clientEmail, 
+      clientPhone, 
+      concept, 
+      dueDate, 
+      observations, 
+      items 
+    } = req.body;
+
+    // Validate required fields
+    if (!clientName || !clientDocument || !concept || !dueDate || !items || items.length === 0) {
+      return res.status(400).json({ error: 'Datos requeridos faltantes' });
+    }
+
+    // Generate invoice number
+    const lastInvoice = await prisma.invoice.findFirst({
+      orderBy: { invoiceNumber: 'desc' }
+    });
+    
+    const nextNumber = lastInvoice 
+      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
+      : 1;
+    
+    const invoiceNumber = `FAC-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+
+    // Calculate total
+    const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+
+    // Create invoice in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create invoice
+      const invoice = await tx.invoice.create({
+        data: {
+          invoiceNumber,
+          concept,
+          total: totalAmount,
+          status: 'PENDING',
+          dueDate: new Date(dueDate),
+          observations: observations || null,
+          userId: req.user.id,
+          // External client data
+          clientName,
+          clientDocument,
+          clientEmail: clientEmail || null,
+          clientPhone: clientPhone || null,
+          isExternal: true,
+          items: {
+            create: items.map(item => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: item.quantity * item.unitPrice
+            }))
+          }
+        },
+        include: {
+          items: true
+        }
+      });
+
+      return invoice;
+    });
+
+    res.status(201).json({
+      message: 'Factura externa generada exitosamente',
+      invoice: result
+    });
+
+  } catch (error) {
+    console.error('External invoice generation error:', error);
+    res.status(500).json({ error: 'Error al generar factura externa' });
   }
 });
 

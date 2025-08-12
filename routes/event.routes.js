@@ -538,6 +538,77 @@ router.delete('/:id/assignments/:assignmentId', authenticateToken, canManageStud
   }
 });
 
+// Get assignments by student
+router.get('/assignments/student/:studentId', authenticateToken, async (req, res) => {
+  try {
+    const assignments = await prisma.eventAssignment.findMany({
+      where: { studentId: req.params.studentId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            ticketPrice: true,
+            status: true
+          }
+        },
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            document: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ assignments });
+  } catch (error) {
+    console.error('Student assignments fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener asignaciones del estudiante' });
+  }
+});
+
+// Get single assignment
+router.get('/assignments/:assignmentId', authenticateToken, async (req, res) => {
+  try {
+    const assignment = await prisma.eventAssignment.findUnique({
+      where: { id: req.params.assignmentId },
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            ticketPrice: true,
+            status: true
+          }
+        },
+        student: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            document: true
+          }
+        }
+      }
+    });
+
+    if (!assignment) {
+      return res.status(404).json({ error: 'Asignación no encontrada' });
+    }
+
+    res.json({ assignment });
+  } catch (error) {
+    console.error('Assignment fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener asignación' });
+  }
+});
+
 // ================================
 // PAGOS DE EVENTOS
 // ================================
@@ -829,6 +900,132 @@ router.get('/dashboard/summary', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Events dashboard error:', error);
     res.status(500).json({ error: 'Error al obtener dashboard de eventos' });
+  }
+});
+
+// Get all event assignments (for reports)
+router.get('/assignments/all', authenticateToken, async (req, res) => {
+  try {
+    const { eventId, eventType, startDate, endDate } = req.query;
+    
+    const where = {};
+    
+    // Build event filter (handle null/empty values)
+    const eventWhere = {};
+    if (eventId && eventId !== 'null' && eventId !== '') eventWhere.id = eventId;
+    if (eventType && eventType !== 'null' && eventType !== '') eventWhere.type = eventType;
+    if ((startDate && startDate !== 'null' && startDate !== '') || 
+        (endDate && endDate !== 'null' && endDate !== '')) {
+      eventWhere.eventDate = {};
+      if (startDate && startDate !== 'null' && startDate !== '') {
+        eventWhere.eventDate.gte = new Date(startDate);
+      }
+      if (endDate && endDate !== 'null' && endDate !== '') {
+        eventWhere.eventDate.lte = new Date(endDate);
+      }
+    }
+    
+    // If we have event filters, get matching event IDs first
+    if (Object.keys(eventWhere).length > 0) {
+      const matchingEvents = await prisma.event.findMany({
+        where: eventWhere,
+        select: { id: true }
+      });
+      where.eventId = { in: matchingEvents.map(e => e.id) };
+    }
+    
+    const assignments = await prisma.eventAssignment.findMany({
+      where,
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            ticketPrice: true,
+            eventDate: true
+          }
+        },
+        student: {
+          include: {
+            grade: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } }
+          }
+        }
+      },
+      orderBy: [
+        { event: { eventDate: 'desc' } },
+        { student: { lastName: 'asc' } }
+      ]
+    });
+
+    res.json(assignments);
+  } catch (error) {
+    console.error('All assignments fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener todas las asignaciones' });
+  }
+});
+
+// Get all event payments (for reports)
+router.get('/payments/all', authenticateToken, async (req, res) => {
+  try {
+    const { eventId, eventType, startDate, endDate } = req.query;
+    
+    const where = { eventId: { not: null } };
+    
+    // Build event filter (handle null/empty values)
+    const eventWhere = {};
+    if (eventId && eventId !== 'null' && eventId !== '') eventWhere.id = eventId;
+    if (eventType && eventType !== 'null' && eventType !== '') eventWhere.type = eventType;
+    if ((startDate && startDate !== 'null' && startDate !== '') || 
+        (endDate && endDate !== 'null' && endDate !== '')) {
+      eventWhere.eventDate = {};
+      if (startDate && startDate !== 'null' && startDate !== '') {
+        eventWhere.eventDate.gte = new Date(startDate);
+      }
+      if (endDate && endDate !== 'null' && endDate !== '') {
+        eventWhere.eventDate.lte = new Date(endDate);
+      }
+    }
+    
+    // If we have event filters, get matching event IDs first
+    if (Object.keys(eventWhere).length > 0) {
+      const matchingEvents = await prisma.event.findMany({
+        where: eventWhere,
+        select: { id: true }
+      });
+      where.eventId = { in: matchingEvents.map(e => e.id) };
+    }
+    
+    const payments = await prisma.payment.findMany({
+      where,
+      include: {
+        event: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            ticketPrice: true,
+            eventDate: true
+          }
+        },
+        student: {
+          include: {
+            grade: { select: { id: true, name: true } },
+            group: { select: { id: true, name: true } }
+          }
+        },
+        user: {
+          select: { name: true }
+        }
+      },
+      orderBy: { date: 'desc' }
+    });
+
+    res.json(payments);
+  } catch (error) {
+    console.error('All payments fetch error:', error);
+    res.status(500).json({ error: 'Error al obtener todos los pagos' });
   }
 });
 

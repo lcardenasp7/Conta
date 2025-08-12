@@ -259,6 +259,9 @@ function updateStudentsTable() {
                     <button class="btn btn-outline-primary" onclick="viewStudent('${student.id}')" title="Ver">
                         <i class="bi bi-eye"></i>
                     </button>
+                    <button class="btn btn-outline-info" onclick="showStudentEventsModal('${student.id}')" title="Eventos">
+                        <i class="bi bi-calendar-event"></i>
+                    </button>
                     <button class="btn btn-outline-warning" onclick="editStudent('${student.id}')" title="Editar">
                         <i class="bi bi-pencil"></i>
                     </button>
@@ -768,6 +771,560 @@ function showWarning(message) {
     }
 }
 
+// ================================
+// STUDENT EVENTS MANAGEMENT
+// ================================
+
+// Show student events modal
+async function showStudentEventsModal(studentId) {
+    try {
+        showLoading();
+        
+        // Get student data
+        const student = currentStudents.find(s => s.id === studentId);
+        if (!student) {
+            showError('Estudiante no encontrado');
+            return;
+        }
+
+        // Get student event assignments
+        const response = await api.get(`/events/assignments/student/${studentId}`);
+        const assignments = response.assignments || [];
+
+        // Get student payments for events
+        const paymentsResponse = await api.get(`/payments?studentId=${studentId}`);
+        const allPayments = paymentsResponse.payments || [];
+        const payments = allPayments.filter(payment => payment.eventId);
+
+        // Create modal HTML
+        const modalHtml = `
+            <div class="modal fade" id="studentEventsModal" tabindex="-1">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="bi bi-calendar-event"></i> 
+                                Eventos - ${student.firstName} ${student.lastName}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-ticket"></i> Asignaciones de Eventos</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Evento</th>
+                                                    <th>Boletos</th>
+                                                    <th>Valor</th>
+                                                    <th>Pagado</th>
+                                                    <th>Pendiente</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${assignments.map(assignment => {
+                                                    const pending = (assignment.ticketsAssigned - assignment.ticketsSold) * assignment.event.ticketPrice;
+                                                    const paid = assignment.ticketsSold * assignment.event.ticketPrice;
+                                                    return `
+                                                        <tr>
+                                                            <td><strong>${assignment.event.name}</strong></td>
+                                                            <td>
+                                                                <span class="badge bg-primary">${assignment.ticketsAssigned}</span>
+                                                                <small class="text-muted">(${assignment.ticketsSold} vendidos)</small>
+                                                            </td>
+                                                            <td>$${formatCurrency(assignment.ticketsAssigned * assignment.event.ticketPrice)}</td>
+                                                            <td class="text-success">$${formatCurrency(paid)}</td>
+                                                            <td class="text-danger">$${formatCurrency(pending)}</td>
+                                                            <td>
+                                                                ${pending > 0 ? `
+                                                                    <div class="btn-group btn-group-sm">
+                                                                        <button class="btn btn-success" onclick="quickPaymentFromStudent('${assignment.id}', ${pending})">
+                                                                            <i class="bi bi-cash"></i> Pagar Todo
+                                                                        </button>
+                                                                        <button class="btn btn-outline-success" onclick="partialPaymentFromStudent('${assignment.id}', ${pending})">
+                                                                            <i class="bi bi-cash-coin"></i> Parcial
+                                                                        </button>
+                                                                    </div>
+                                                                ` : '<span class="text-success">✓ Completo</span>'}
+                                                            </td>
+                                                        </tr>
+                                                    `;
+                                                }).join('') || '<tr><td colspan="6" class="text-center text-muted">No hay asignaciones de eventos</td></tr>'}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <h6><i class="bi bi-cash-stack"></i> Historial de Pagos</h6>
+                                    <div class="table-responsive">
+                                        <table class="table table-sm">
+                                            <thead>
+                                                <tr>
+                                                    <th>Fecha</th>
+                                                    <th>Evento</th>
+                                                    <th>Monto</th>
+                                                    <th>Método</th>
+                                                    <th>Estado</th>
+                                                    <th>Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${payments.map(payment => `
+                                                    <tr>
+                                                        <td>${new Date(payment.date).toLocaleDateString()}</td>
+                                                        <td>${payment.event?.name || 'N/A'}</td>
+                                                        <td class="text-success">$${formatCurrency(payment.amount)}</td>
+                                                        <td><span class="badge bg-secondary">${payment.method}</span></td>
+                                                        <td>
+                                                            <span class="badge ${payment.status === 'COMPLETED' ? 'bg-success' : payment.status === 'CANCELLED' ? 'bg-danger' : 'bg-warning'}">
+                                                                ${payment.status}
+                                                            </span>
+                                                        </td>
+                                                        <td>
+                                                            ${payment.status === 'COMPLETED' ? `
+                                                                <button class="btn btn-sm btn-outline-danger" onclick="cancelPayment('${payment.id}')" title="Cancelar Pago">
+                                                                    <i class="bi bi-x-circle"></i>
+                                                                </button>
+                                                            ` : ''}
+                                                        </td>
+                                                    </tr>
+                                                `).join('') || '<tr><td colspan="6" class="text-center text-muted">No hay pagos registrados</td></tr>'}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-primary" onclick="generateStudentInvoice('${studentId}')">
+                                <i class="bi bi-file-earmark-text"></i> Generar Factura
+                            </button>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remove existing modal if any
+        const existingModal = document.getElementById('studentEventsModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+
+        // Add modal to DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('studentEventsModal'));
+        modal.show();
+
+        hideLoading();
+    } catch (error) {
+        console.error('❌ Error loading student events:', error);
+        showError('Error al cargar eventos del estudiante');
+        hideLoading();
+    }
+}
+
+// Quick payment from student events modal
+async function quickPaymentFromStudent(assignmentId, amount) {
+    try {
+        const result = await Swal.fire({
+            title: 'Pago Rápido',
+            html: `
+                <div class="text-start">
+                    <p><strong>Monto a pagar:</strong> $${formatCurrency(amount)}</p>
+                    <hr>
+                    <div class="mb-3">
+                        <label for="quickPaymentMethodStudent" class="form-label">Método de Pago:</label>
+                        <select class="form-select" id="quickPaymentMethodStudent">
+                            <option value="CASH">Efectivo</option>
+                            <option value="BANK_TRANSFER">Transferencia</option>
+                            <option value="CARD">Tarjeta</option>
+                            <option value="OTHER">Otro</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="quickPaymentReferenceStudent" class="form-label">Referencia (opcional):</label>
+                        <input type="text" class="form-control" id="quickPaymentReferenceStudent" placeholder="Número de transacción, etc.">
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Procesar Pago',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#28a745',
+            preConfirm: () => {
+                const method = document.getElementById('quickPaymentMethodStudent').value;
+                const reference = document.getElementById('quickPaymentReferenceStudent').value;
+                
+                if (!method) {
+                    Swal.showValidationMessage('Debe seleccionar un método de pago');
+                    return false;
+                }
+                
+                return { method, reference };
+            }
+        });
+
+        if (result.isConfirmed) {
+            showLoading();
+            
+            // Get assignment details
+            const assignmentResponse = await api.get(`/events/assignments/${assignmentId}`);
+            const assignment = assignmentResponse.assignment;
+            
+            // Create payment
+            const paymentData = {
+                studentId: assignment.studentId,
+                eventId: assignment.eventId,
+                amount: amount,
+                method: result.value.method,
+                reference: result.value.reference,
+                concept: `Pago evento: ${assignment.event.name}`
+            };
+
+            await api.post('/payments', paymentData);
+            
+            // Update assignment
+            const ticketsToSell = Math.floor(amount / assignment.event.ticketPrice);
+            await api.put(`/events/assignments/${assignmentId}`, {
+                ticketsSold: assignment.ticketsSold + ticketsToSell
+            });
+
+            showSuccess('Pago procesado exitosamente');
+            
+            // Notify dashboard of payment
+            if (typeof notifyPaymentMade === 'function') {
+                notifyPaymentMade({
+                    amount: amount,
+                    studentName: `${student.firstName} ${student.lastName}`,
+                    concept: `Pago evento: ${assignment.event.name}`
+                });
+            }
+            
+            // Refresh the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('studentEventsModal'));
+            modal.hide();
+            setTimeout(() => showStudentEventsModal(assignment.studentId), 500);
+            
+            hideLoading();
+        }
+    } catch (error) {
+        console.error('❌ Error processing payment:', error);
+        showError('Error al procesar el pago: ' + error.message);
+        hideLoading();
+    }
+}
+
+// Partial payment from student events modal
+async function partialPaymentFromStudent(assignmentId, maxAmount) {
+    try {
+        const result = await Swal.fire({
+            title: 'Pago Parcial',
+            html: `
+                <div class="text-start">
+                    <p><strong>Monto máximo:</strong> $${formatCurrency(maxAmount)}</p>
+                    <hr>
+                    <div class="mb-3">
+                        <label for="partialPaymentAmount" class="form-label">Monto a pagar:</label>
+                        <input type="number" class="form-control" id="partialPaymentAmount" 
+                               min="0.01" max="${maxAmount}" step="0.01" placeholder="0.00">
+                    </div>
+                    <div class="mb-3">
+                        <label for="partialPaymentMethod" class="form-label">Método de Pago:</label>
+                        <select class="form-select" id="partialPaymentMethod">
+                            <option value="CASH">Efectivo</option>
+                            <option value="BANK_TRANSFER">Transferencia</option>
+                            <option value="CARD">Tarjeta</option>
+                            <option value="OTHER">Otro</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="partialPaymentReference" class="form-label">Referencia (opcional):</label>
+                        <input type="text" class="form-control" id="partialPaymentReference" placeholder="Número de transacción, etc.">
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Procesar Pago',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#28a745',
+            preConfirm: () => {
+                const amount = parseFloat(document.getElementById('partialPaymentAmount').value);
+                const method = document.getElementById('partialPaymentMethod').value;
+                const reference = document.getElementById('partialPaymentReference').value;
+                
+                if (!amount || amount <= 0) {
+                    Swal.showValidationMessage('Debe ingresar un monto válido');
+                    return false;
+                }
+                
+                if (amount > maxAmount) {
+                    Swal.showValidationMessage(`El monto no puede ser mayor a $${formatCurrency(maxAmount)}`);
+                    return false;
+                }
+                
+                if (!method) {
+                    Swal.showValidationMessage('Debe seleccionar un método de pago');
+                    return false;
+                }
+                
+                return { amount, method, reference };
+            }
+        });
+
+        if (result.isConfirmed) {
+            showLoading();
+            
+            // Get assignment details
+            const assignmentResponse = await api.get(`/events/assignments/${assignmentId}`);
+            const assignment = assignmentResponse.assignment;
+            
+            // Create payment
+            const paymentData = {
+                studentId: assignment.studentId,
+                eventId: assignment.eventId,
+                amount: result.value.amount,
+                method: result.value.method,
+                reference: result.value.reference,
+                concept: `Pago parcial evento: ${assignment.event.name}`
+            };
+
+            await api.post('/payments', paymentData);
+            
+            // Update assignment (calculate tickets sold based on payment)
+            const ticketPrice = assignment.event.ticketPrice;
+            const ticketsToSell = Math.floor(result.value.amount / ticketPrice);
+            
+            if (ticketsToSell > 0) {
+                await api.put(`/events/assignments/${assignmentId}`, {
+                    ticketsSold: assignment.ticketsSold + ticketsToSell
+                });
+            }
+
+            showSuccess('Pago parcial procesado exitosamente');
+            
+            // Notify dashboard of payment
+            if (typeof notifyPaymentMade === 'function') {
+                notifyPaymentMade({
+                    amount: result.value.amount,
+                    studentName: `${student.firstName} ${student.lastName}`,
+                    concept: `Pago parcial evento: ${assignment.event.name}`
+                });
+            }
+            
+            // Refresh the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('studentEventsModal'));
+            modal.hide();
+            setTimeout(() => showStudentEventsModal(assignment.studentId), 500);
+            
+            hideLoading();
+        }
+    } catch (error) {
+        console.error('❌ Error processing partial payment:', error);
+        showError('Error al procesar el pago parcial: ' + error.message);
+        hideLoading();
+    }
+}
+
+// Cancel payment
+async function cancelPayment(paymentId) {
+    try {
+        const result = await Swal.fire({
+            title: '¿Cancelar Pago?',
+            text: 'Esta acción no se puede deshacer',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Sí, cancelar',
+            cancelButtonText: 'No',
+            confirmButtonColor: '#dc3545'
+        });
+
+        if (result.isConfirmed) {
+            showLoading();
+            
+            await api.patch(`/payments/${paymentId}/cancel`, {
+                reason: 'Cancelado desde gestión de estudiantes'
+            });
+            
+            showSuccess('Pago cancelado exitosamente');
+            
+            // Refresh the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('studentEventsModal'));
+            const studentId = modal._element.querySelector('[onclick*="showStudentEventsModal"]')?.onclick?.toString().match(/'([^']+)'/)?.[1];
+            if (studentId) {
+                modal.hide();
+                setTimeout(() => showStudentEventsModal(studentId), 500);
+            }
+            
+            hideLoading();
+        }
+    } catch (error) {
+        console.error('❌ Error canceling payment:', error);
+        showError('Error al cancelar el pago: ' + error.message);
+        hideLoading();
+    }
+}
+
+// Generate invoice for student
+async function generateStudentInvoice(studentId) {
+    try {
+        showLoading();
+        
+        // Get student data
+        const student = currentStudents.find(s => s.id === studentId);
+        if (!student) {
+            showError('Estudiante no encontrado');
+            return;
+        }
+
+        // Get pending assignments
+        const response = await api.get(`/events/assignments/student/${studentId}`);
+        const assignments = response.assignments || [];
+        const pendingAssignments = assignments.filter(assignment => {
+            const pending = assignment.ticketsAssigned - assignment.ticketsSold;
+            return pending > 0;
+        });
+
+        if (pendingAssignments.length === 0) {
+            showWarning('El estudiante no tiene pagos pendientes para generar factura');
+            hideLoading();
+            return;
+        }
+
+        // Show invoice generation modal
+        const result = await Swal.fire({
+            title: 'Generar Factura',
+            html: `
+                <div class="text-start">
+                    <p><strong>Estudiante:</strong> ${student.firstName} ${student.lastName}</p>
+                    <p><strong>Documento:</strong> ${student.document}</p>
+                    <hr>
+                    <h6>Conceptos a facturar:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Evento</th>
+                                    <th>Cantidad</th>
+                                    <th>Valor Unit.</th>
+                                    <th>Total</th>
+                                    <th>Incluir</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${pendingAssignments.map(assignment => {
+                                    const pending = assignment.ticketsAssigned - assignment.ticketsSold;
+                                    const total = pending * assignment.event.ticketPrice;
+                                    return `
+                                        <tr>
+                                            <td>${assignment.event.name}</td>
+                                            <td>${pending}</td>
+                                            <td>$${formatCurrency(assignment.event.ticketPrice)}</td>
+                                            <td>$${formatCurrency(total)}</td>
+                                            <td>
+                                                <input type="checkbox" class="form-check-input invoice-item" 
+                                                       value="${assignment.id}" checked 
+                                                       data-amount="${total}">
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <hr>
+                    <div class="mb-3">
+                        <label for="invoiceObservations" class="form-label">Observaciones (opcional):</label>
+                        <textarea class="form-control" id="invoiceObservations" rows="2" 
+                                  placeholder="Observaciones adicionales para la factura"></textarea>
+                    </div>
+                    <div class="alert alert-info">
+                        <strong>Total a facturar:</strong> $<span id="invoiceTotal">0</span>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Generar Factura',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#28a745',
+            width: '800px',
+            didOpen: () => {
+                // Calculate total when checkboxes change
+                const updateTotal = () => {
+                    const checkboxes = document.querySelectorAll('.invoice-item:checked');
+                    let total = 0;
+                    checkboxes.forEach(cb => {
+                        total += parseFloat(cb.dataset.amount);
+                    });
+                    document.getElementById('invoiceTotal').textContent = formatCurrency(total);
+                };
+                
+                // Initial calculation
+                updateTotal();
+                
+                // Add event listeners
+                document.querySelectorAll('.invoice-item').forEach(cb => {
+                    cb.addEventListener('change', updateTotal);
+                });
+            },
+            preConfirm: () => {
+                const selectedItems = Array.from(document.querySelectorAll('.invoice-item:checked'));
+                const observations = document.getElementById('invoiceObservations').value;
+                
+                if (selectedItems.length === 0) {
+                    Swal.showValidationMessage('Debe seleccionar al menos un concepto para facturar');
+                    return false;
+                }
+                
+                return {
+                    assignmentIds: selectedItems.map(cb => cb.value),
+                    observations
+                };
+            }
+        });
+
+        if (result.isConfirmed) {
+            // Create invoice
+            const invoiceData = {
+                studentId: studentId,
+                concept: 'Factura por eventos escolares',
+                observations: result.value.observations,
+                assignmentIds: result.value.assignmentIds
+            };
+
+            const invoiceResponse = await api.createStudentInvoice(invoiceData);
+            
+            showSuccess('Factura generada exitosamente');
+            
+            // Notify dashboard of invoice generation
+            if (typeof notifyInvoiceGenerated === 'function') {
+                notifyInvoiceGenerated({
+                    invoiceNumber: invoiceResponse.invoice.invoiceNumber,
+                    studentName: `${student.firstName} ${student.lastName}`,
+                    amount: invoiceResponse.invoice.total
+                });
+            }
+            
+            // Refresh the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('studentEventsModal'));
+            modal.hide();
+            setTimeout(() => showStudentEventsModal(studentId), 500);
+        }
+        
+        hideLoading();
+    } catch (error) {
+        console.error('❌ Error generating invoice:', error);
+        showError('Error al generar factura: ' + error.message);
+        hideLoading();
+    }
+}
+
 // Export functions for global access
 window.initStudents = initStudents;
 window.showCreateStudentModal = showCreateStudentModal;
@@ -780,3 +1337,8 @@ window.searchStudents = searchStudents;
 window.clearStudentFilters = clearStudentFilters;
 window.loadStudentsPage = loadStudentsPage;
 window.exportStudents = exportStudents;
+window.showStudentEventsModal = showStudentEventsModal;
+window.quickPaymentFromStudent = quickPaymentFromStudent;
+window.partialPaymentFromStudent = partialPaymentFromStudent;
+window.cancelPayment = cancelPayment;
+window.generateStudentInvoice = generateStudentInvoice;

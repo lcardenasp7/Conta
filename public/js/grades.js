@@ -1238,14 +1238,33 @@ function showWarning(message) {
     }
 }
 
+// Loading state management
+let loadingCount = 0;
+let loadingTimeout = null;
+
 function showLoading() {
-    // Implementar según tu sistema de loading
-    console.log('🔄 Loading...');
+    loadingCount++;
+    if (loadingCount === 1) {
+        console.log('🔄 Loading...');
+        // Show actual loading UI here if needed
+    }
 }
 
 function hideLoading() {
-    // Implementar según tu sistema de loading
-    console.log('✅ Loading finished');
+    loadingCount = Math.max(0, loadingCount - 1);
+    
+    // Clear any existing timeout
+    if (loadingTimeout) {
+        clearTimeout(loadingTimeout);
+    }
+    
+    // Only hide loading after a small delay to prevent flickering
+    loadingTimeout = setTimeout(() => {
+        if (loadingCount === 0) {
+            console.log('✅ Loading finished');
+            // Hide actual loading UI here if needed
+        }
+    }, 100);
 }
 
 // Export functions for global access

@@ -27,20 +27,41 @@ Esta guía te ayudará a desplegar el Sistema de Gestión Escolar en Railway.
 
 ### 3. Configurar Variables de Entorno
 
+**IMPORTANTE**: Antes de configurar, genera un JWT_SECRET seguro:
+```bash
+node scripts/generate-jwt-secret.js
+```
+
 En Railway, ve a tu servicio → "Variables" y agrega:
 
 ```env
+# CONFIGURACIÓN CRÍTICA DE SEGURIDAD
 NODE_ENV=production
-JWT_SECRET=tu_jwt_secret_muy_seguro_cambiar_aqui
+JWT_SECRET=TU_CLAVE_GENERADA_DE_64_CARACTERES_AQUI
+JWT_EXPIRES_IN=24h
+
+# CONFIGURACIÓN DE CORS (IMPORTANTE)
+FRONTEND_URL=https://tu-dominio-railway.up.railway.app
+
+# CONFIGURACIÓN DE RATE LIMITING
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# INFORMACIÓN DE LA INSTITUCIÓN
 INSTITUTION_NAME=Institución Educativa Villas de San Pablo
 INSTITUTION_NIT=123456789-0
 INSTITUTION_ADDRESS=Carrera 123 #45-67, Barranquilla, Colombia
 INSTITUTION_PHONE=+57 5 123 4567
 INSTITUTION_EMAIL=info@villasanpablo.edu.co
-CORS_ORIGIN=*
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
+
+# CONFIGURACIÓN DE ARCHIVOS
+MAX_FILE_SIZE=10485760
+UPLOAD_PATH=./uploads
 ```
+
+**⚠️ CRÍTICO**: 
+- Reemplaza `TU_CLAVE_GENERADA_DE_64_CARACTERES_AQUI` con la clave generada
+- Reemplaza `tu-dominio-railway.up.railway.app` con tu URL real de Railway
 
 ### 4. Configurar Build y Deploy
 
@@ -50,13 +71,28 @@ Railway detectará automáticamente:
 - ✅ `Procfile` para comando de inicio
 - ✅ `railway.json` para configuración específica
 
-### 5. Deploy Automático
+### 5. Verificación Pre-Deploy
+
+**ANTES de hacer deploy**, ejecuta la verificación:
+```bash
+node scripts/production-check.js
+```
+
+### 6. Optimización de Base de Datos
+
+Después del primer deploy, optimiza la base de datos:
+```bash
+railway run node scripts/optimize-database.js
+```
+
+### 7. Deploy Automático
 
 1. Railway iniciará el build automáticamente
 2. Instalará dependencias con `npm ci`
 3. Generará Prisma client con `npx prisma generate`
 4. Ejecutará migraciones de base de datos
 5. Iniciará el servidor con `npm start`
+6. Verificará el health check en `/health`
 
 ## 🔧 Comandos Útiles
 

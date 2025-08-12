@@ -741,6 +741,11 @@ async function initializePage(pageName) {
                     await initDebts();
                 }
                 break;
+            case 'reports':
+                if (typeof initReports === 'function') {
+                    await initReports();
+                }
+                break;
             case 'events':
                 if (typeof initEvents === 'function') {
                     await initEvents();

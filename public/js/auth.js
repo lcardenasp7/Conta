@@ -77,6 +77,11 @@ function showDashboard() {
     document.getElementById('loginContainer').style.display = 'none';
     document.getElementById('mainContainer').classList.remove('d-none');
     
+    // Clear any hash from URL
+    if (window.location.hash) {
+        history.replaceState(null, null, window.location.pathname + window.location.search);
+    }
+    
     // Update user name in navbar
     const user = getCurrentUser();
     if (user) {

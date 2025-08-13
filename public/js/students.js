@@ -918,9 +918,22 @@ async function showStudentEventsModal(studentId) {
         // Add modal to DOM
         document.body.insertAdjacentHTML('beforeend', modalHtml);
 
-        // Show modal
-        const modal = new bootstrap.Modal(document.getElementById('studentEventsModal'));
-        modal.show();
+        // Show modal with accessibility support
+        const modalElement = document.getElementById('studentEventsModal');
+        
+        // Enhance accessibility if the helper is available
+        if (typeof enhanceModalAccessibility === 'function') {
+            enhanceModalAccessibility(modalElement);
+        }
+        
+        // Show modal using accessible method if available
+        if (typeof showAccessibleModal === 'function') {
+            showAccessibleModal(modalElement);
+        } else {
+            modalElement.removeAttribute('aria-hidden');
+            const modal = new bootstrap.Modal(modalElement);
+            modal.show();
+        }
 
         hideLoading();
     } catch (error) {

@@ -627,6 +627,198 @@ const pageTemplates = {
                 </div>
             </div>
         </div>
+    `,
+    
+    institution: `
+        <div class="container-fluid">
+            <!-- Institution Configuration Header -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2><i class="bi bi-building"></i> Configuración Institucional</h2>
+                <div class="btn-group">
+                    <button class="btn btn-primary" onclick="saveInstitutionData()" id="saveInstitutionBtn">
+                        <i class="bi bi-save"></i> Guardar Cambios
+                    </button>
+                    <button class="btn btn-outline-secondary" onclick="resetInstitutionForm()" id="resetInstitutionBtn">
+                        <i class="bi bi-arrow-clockwise"></i> Restablecer
+                    </button>
+                </div>
+            </div>
+
+            <!-- Institution Form -->
+            <div class="row">
+                <div class="col-lg-8">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-info-circle"></i> Información Institucional</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="institutionForm">
+                                <!-- Basic Information -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="institutionName" class="form-label">Nombre de la Institución *</label>
+                                        <input type="text" class="form-control" id="institutionName" name="name" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="institutionNit" class="form-label">NIT *</label>
+                                        <input type="text" class="form-control" id="institutionNit" name="nit" required placeholder="000000000-0">
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="institutionDane" class="form-label">Código DANE</label>
+                                        <input type="text" class="form-control" id="institutionDane" name="dane" placeholder="000000000000">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="institutionResolution" class="form-label">Resolución DIAN</label>
+                                        <input type="text" class="form-control" id="institutionResolution" name="resolution" placeholder="Resolución No. 000">
+                                    </div>
+                                </div>
+
+                                <!-- Location -->
+                                <h6 class="text-primary mb-3"><i class="bi bi-geo-alt"></i> Ubicación</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <label for="institutionAddress" class="form-label">Dirección *</label>
+                                        <input type="text" class="form-control" id="institutionAddress" name="address" required>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-4">
+                                        <label for="institutionCity" class="form-label">Ciudad *</label>
+                                        <input type="text" class="form-control" id="institutionCity" name="city" required>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="institutionState" class="form-label">Departamento</label>
+                                        <input type="text" class="form-control" id="institutionState" name="state">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="institutionLocality" class="form-label">Localidad</label>
+                                        <input type="text" class="form-control" id="institutionLocality" name="locality">
+                                    </div>
+                                </div>
+
+                                <!-- Contact -->
+                                <h6 class="text-primary mb-3"><i class="bi bi-telephone"></i> Contacto</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="institutionPhone" class="form-label">Teléfono *</label>
+                                        <input type="tel" class="form-control" id="institutionPhone" name="phone" required>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="institutionEmail" class="form-label">Email *</label>
+                                        <input type="email" class="form-control" id="institutionEmail" name="email" required>
+                                    </div>
+                                </div>
+
+                                <!-- Academic Information -->
+                                <h6 class="text-primary mb-3"><i class="bi bi-mortarboard"></i> Información Académica</h6>
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="institutionLevels" class="form-label">Niveles Educativos</label>
+                                        <input type="text" class="form-control" id="institutionLevels" name="levels" placeholder="Preescolar, Básica, Media">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="institutionTitle" class="form-label">Título que Otorga</label>
+                                        <input type="text" class="form-control" id="institutionTitle" name="title" placeholder="Bachiller Académico">
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="institutionCalendar" class="form-label">Calendario</label>
+                                        <select class="form-select" id="institutionCalendar" name="calendar">
+                                            <option value="">Seleccionar</option>
+                                            <option value="A">Calendario A</option>
+                                            <option value="B">Calendario B</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="institutionSchedule" class="form-label">Jornada</label>
+                                        <select class="form-select" id="institutionSchedule" name="schedule">
+                                            <option value="">Seleccionar</option>
+                                            <option value="Mañana">Mañana</option>
+                                            <option value="Tarde">Tarde</option>
+                                            <option value="Noche">Noche</option>
+                                            <option value="Completa">Completa</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Logo Section -->
+                <div class="col-lg-4">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-image"></i> Logo Institucional</h5>
+                        </div>
+                        <div class="card-body text-center">
+                            <!-- Logo Preview -->
+                            <div class="mb-3">
+                                <img id="logoPreview" src="" alt="Logo Institucional" class="img-fluid rounded border" style="max-height: 200px; display: none;">
+                                <div id="logoPlaceholder" class="border rounded d-flex align-items-center justify-content-center" style="height: 200px; background-color: #f8f9fa;">
+                                    <div class="text-muted">
+                                        <i class="bi bi-image fs-1"></i>
+                                        <p class="mt-2">Sin logo</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Logo Upload -->
+                            <div class="mb-3">
+                                <input type="file" class="form-control" id="logoInput" accept="image/*" style="display: none;">
+                                <button type="button" class="btn btn-primary" onclick="document.getElementById('logoInput').click()">
+                                    <i class="bi bi-upload"></i> Cargar Logo
+                                </button>
+                            </div>
+
+                            <!-- Logo Actions -->
+                            <div class="d-grid gap-2" id="logoActions" style="display: none;">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="showLogoHistory()">
+                                    <i class="bi bi-clock-history"></i> Historial
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteLogo()">
+                                    <i class="bi bi-trash"></i> Eliminar Logo
+                                </button>
+                            </div>
+
+                            <!-- Logo Info -->
+                            <small class="text-muted">
+                                Formatos: JPG, PNG, GIF<br>
+                                Tamaño máximo: 2MB
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Preview Card -->
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h6 class="mb-0"><i class="bi bi-eye"></i> Vista Previa</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="text-center">
+                                <img id="logoPreviewSmall" src="" alt="Logo" class="mb-2" style="max-height: 50px; display: none;">
+                                <h6 id="previewName" class="mb-1">Nombre de la Institución</h6>
+                                <small id="previewNit" class="text-muted">NIT: 000000000-0</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading Indicator -->
+            <div id="institutionLoading" class="text-center py-4" style="display: none;">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Cargando...</span>
+                </div>
+                <p class="mt-2 text-muted">Cargando configuración institucional...</p>
+            </div>
+        </div>
     `
 };
 
@@ -636,6 +828,11 @@ async function loadPage(pageName) {
     const pageTitle = document.getElementById('pageTitle');
     
     if (!contentArea || !pageTitle) return;
+    
+    // Clear any hash from URL
+    if (window.location.hash) {
+        history.replaceState(null, null, window.location.pathname + window.location.search);
+    }
     
     // Update active menu item
     updateActiveMenuItem(pageName);
@@ -744,6 +941,13 @@ async function initializePage(pageName) {
             case 'reports':
                 if (typeof initReports === 'function') {
                     await initReports();
+                }
+                break;
+            case 'institution':
+                if (typeof initInstitution === 'function') {
+                    await initInstitution();
+                } else {
+                    console.error('Institution module not loaded');
                 }
                 break;
             case 'events':
@@ -952,6 +1156,21 @@ window.switchToEventsTab = switchToEventsTab;
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
+    // Prevent hash navigation globally
+    document.addEventListener('click', function(e) {
+        const link = e.target.closest('a[href="#"]');
+        if (link) {
+            e.preventDefault();
+            // Let the onclick handler manage navigation
+            return false;
+        }
+    });
+    
+    // Clear hash on page load
+    if (window.location.hash) {
+        history.replaceState(null, null, window.location.pathname + window.location.search);
+    }
+    
     // Wait for auth to initialize first
     setTimeout(() => {
         if (isAuthenticated()) {

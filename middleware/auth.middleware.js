@@ -214,6 +214,25 @@ const logActivity = (action) => {
   };
 };
 
+// Check if user can manage institution settings
+const canManageInstitution = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'No autenticado'
+    });
+  }
+
+  const allowedRoles = ['RECTOR', 'ADMIN', 'ACCOUNTANT', 'AUXILIARY_ACCOUNTANT'];
+  
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({
+      error: 'No tiene permisos para gestionar configuración institucional'
+    });
+  }
+
+  next();
+};
+
 module.exports = {
   authenticateToken,
   authorizeRoles,
@@ -222,5 +241,6 @@ module.exports = {
   canManageAccounting,
   canManageStudents,
   canViewReports,
+  canManageInstitution,
   logActivity
 };

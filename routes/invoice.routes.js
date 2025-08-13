@@ -3,6 +3,8 @@ const { body, validationResult, query } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateToken, canManageAccounting } = require('../middleware/auth.middleware');
 const invoiceGeneratorService = require('../services/invoice-generator.service');
+const multer = require('multer');
+const path = require('path');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -340,16 +342,8 @@ router.post('/', authenticateToken, canManageAccounting, validateInvoice, async 
     const tax = 0; // Educational services are exempt from VAT
     const total = subtotal; // Total equals subtotal for educational services
 
-    // Generate invoice number
-    const lastInvoice = await prisma.invoice.findFirst({
-      orderBy: { invoiceNumber: 'desc' }
-    });
-    
-    const nextNumber = lastInvoice 
-      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
-      : 1;
-    
-    const invoiceNumber = `FAC-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+    // Generate unique invoice number
+    const invoiceNumber = await generateUniqueInvoiceNumber(prisma);
 
     const invoice = await prisma.invoice.create({
       data: {
@@ -384,6 +378,12 @@ router.post('/', authenticateToken, canManageAccounting, validateInvoice, async 
     res.status(201).json(invoice);
   } catch (error) {
     console.error('Invoice creation error:', error);
+    
+    // Handle specific errors
+    if (error.code === 'P2002' || error.message.includes('duplicado')) {
+      return res.status(400).json({ error: 'Número de factura duplicado' });
+    }
+    
     res.status(500).json({ error: 'Error al crear factura' });
   }
 });
@@ -555,6 +555,204 @@ router.delete('/:id', authenticateToken, canManageAccounting, async (req, res) =
   }
 });
 
+// Download invoice PDF - USANDO SERVICIO CORREGIDO
+router.get('/:id/pdf', authenticateToken, async (req, res) => {
+  try {
+    console.log('📄 PDF download request for invoice:', req.params.id);
+    const invoiceId = req.params.id;
+    
+    // Usar el servicio corregido para generar el PDF
+    const invoiceService = require('../services/invoice-generator.service.js');
+    
+    const pdfBuffer = await invoiceService.generateInvoicePDFBuffer(invoiceId);
+    
+    if (!pdfBuffer || pdfBuffer.length === 0) {
+      console.log('❌ Error generating PDF buffer');
+      return res.status(500).json({ error: 'Error generando PDF' });
+    }
+
+    // Obtener información de la factura para el nombre del archivo
+    const invoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      select: { invoiceNumber: true }
+    });
+
+    console.log('✅ PDF generated successfully using corrected service');
+
+    // Configurar headers para descarga
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Factura_${invoice?.invoiceNumber || 'Unknown'}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length.toString());
+    res.setHeader('Cache-Control', 'no-cache');
+    
+    console.log('📤 Sending PDF buffer...');
+    
+    // Enviar buffer
+    res.send(pdfBuffer);
+    
+    console.log('✅ PDF sent successfully with corrected header');
+    doc.moveTo(40, currentY)
+       .lineTo(555, currentY)
+       .strokeColor('#bdc3c7')
+       .lineWidth(1)
+       .stroke();
+
+    currentY += 20;
+
+    // Información en dos columnas
+    doc.fontSize(9)
+       .font('Helvetica-Bold')
+       .fillColor('#2c3e50')
+       .text('INFORMACIÓN DEL CLIENTE', 40, currentY)
+       .text('INFORMACIÓN DE LA FACTURA', 320, currentY);
+
+    currentY += 15;
+    doc.fontSize(8)
+       .font('Helvetica')
+       .fillColor('#000000');
+
+    // Cliente
+    if (invoice.student) {
+      const studentName = `${invoice.student.firstName} ${invoice.student.lastName}`;
+      doc.text(`Cliente: ${studentName}`, 40, currentY)
+         .text(`Documento: ${invoice.student.document}`, 40, currentY + 12)
+         .text(`Grado: ${invoice.student.grade?.name || 'N/A'}`, 40, currentY + 24)
+         .text(`Grupo: ${invoice.student.group?.name || 'N/A'}`, 40, currentY + 36);
+    } else {
+      doc.text(`Cliente: ${invoice.clientName || 'Cliente Externo'}`, 40, currentY)
+         .text(`Documento: ${invoice.clientDocument || 'N/A'}`, 40, currentY + 12)
+         .text(`Email: ${invoice.clientEmail || 'N/A'}`, 40, currentY + 24)
+         .text(`Teléfono: ${invoice.clientPhone || 'N/A'}`, 40, currentY + 36);
+    }
+
+    // Factura
+    doc.text(`Número: ${invoice.invoiceNumber}`, 320, currentY)
+       .text(`Fecha: ${new Date(invoice.date).toLocaleDateString('es-CO')}`, 320, currentY + 12)
+       .text(`Vencimiento: ${new Date(invoice.dueDate).toLocaleDateString('es-CO')}`, 320, currentY + 24)
+       .text(`Estado: Pendiente`, 320, currentY + 36);
+
+    currentY += 60;
+
+    // Tabla de items
+    doc.fontSize(9)
+       .font('Helvetica-Bold')
+       .fillColor('#2c3e50')
+       .text('DESCRIPCIÓN', 40, currentY)
+       .text('CANT.', 330, currentY)
+       .text('PRECIO UNIT.', 380, currentY)
+       .text('TOTAL', 470, currentY);
+
+    // Línea bajo headers
+    currentY += 12;
+    doc.moveTo(40, currentY)
+       .lineTo(555, currentY)
+       .strokeColor('#bdc3c7')
+       .lineWidth(1)
+       .stroke();
+
+    currentY += 15;
+
+    // Items
+    doc.fontSize(8)
+       .font('Helvetica')
+       .fillColor('#000000');
+
+    invoice.items.forEach(item => {
+      doc.text(item.description, 40, currentY, { width: 280, ellipsis: true })
+         .text(item.quantity.toString(), 330, currentY, { width: 40, align: 'center' })
+         .text(`$${item.unitPrice.toLocaleString()}`, 380, currentY, { width: 80, align: 'right' })
+         .text(`$${item.total.toLocaleString()}`, 470, currentY, { width: 85, align: 'right' });
+      currentY += 18;
+    });
+
+    currentY += 20;
+
+    // Totales
+    doc.moveTo(350, currentY)
+       .lineTo(555, currentY)
+       .strokeColor('#bdc3c7')
+       .lineWidth(1)
+       .stroke();
+
+    currentY += 10;
+    doc.fontSize(9)
+       .font('Helvetica')
+       .text('Subtotal:', 400, currentY)
+       .text('IVA (0%):', 400, currentY + 12)
+       .font('Helvetica-Bold')
+       .fontSize(10)
+       .text('TOTAL:', 400, currentY + 24);
+
+    doc.font('Helvetica')
+       .fontSize(9)
+       .text(`$${invoice.total.toLocaleString()}`, 470, currentY, { width: 85, align: 'right' })
+       .text('$0', 470, currentY + 12, { width: 85, align: 'right' })
+       .font('Helvetica-Bold')
+       .fontSize(11)
+       .fillColor('#2c3e50')
+       .text(`$${invoice.total.toLocaleString()}`, 470, currentY + 24, { width: 85, align: 'right' });
+
+    currentY += 60;
+
+    // Footer
+    doc.moveTo(40, currentY)
+       .lineTo(555, currentY)
+       .strokeColor('#bdc3c7')
+       .lineWidth(1)
+       .stroke();
+
+    currentY += 10;
+    doc.fontSize(7)
+       .font('Helvetica')
+       .fillColor('#666666')
+       .text('Esta factura fue generada electrónicamente por el Sistema de Gestión Educativa', 40, currentY, { width: 515 })
+       .text(`Resolución DIAN: ${institution?.resolution || 'N/A'}`, 40, currentY + 12)
+       .text('Los servicios educativos están exentos de IVA según el artículo 476 del Estatuto Tributario', 40, currentY + 24, { width: 515 })
+       .text(`Para consultas: ${institution?.email || 'N/A'} | ${institution?.phone || 'N/A'}`, 40, currentY + 36, { width: 515 });
+    
+    // Convertir a buffer
+    const buffers = [];
+    
+    doc.on('data', (chunk) => {
+      buffers.push(chunk);
+    });
+    
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(buffers);
+      console.log('📦 PDF buffer created, size:', pdfBuffer.length, 'bytes');
+      
+      // Configurar headers
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="Factura_${invoice.invoiceNumber}.pdf"`);
+      res.setHeader('Content-Length', pdfBuffer.length.toString());
+      res.setHeader('Cache-Control', 'no-cache');
+      
+      console.log('📤 Sending PDF buffer...');
+      
+      // Enviar buffer
+      res.send(pdfBuffer);
+      
+      console.log('✅ PDF sent successfully');
+    });
+    
+    doc.on('error', (error) => {
+      console.error('❌ PDF creation error:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Error creando PDF' });
+      }
+    });
+    
+    // Finalizar documento
+    doc.end();
+
+  } catch (error) {
+    console.error('❌ PDF generation error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Error al generar PDF de la factura' });
+    }
+  }
+});
+
 // Generate invoice for student events
 router.post('/student', authenticateToken, canManageAccounting, async (req, res) => {
   try {
@@ -598,16 +796,8 @@ router.post('/student', authenticateToken, canManageAccounting, async (req, res)
       return res.status(404).json({ error: 'No se encontraron asignaciones válidas' });
     }
 
-    // Generate invoice number
-    const lastInvoice = await prisma.invoice.findFirst({
-      orderBy: { invoiceNumber: 'desc' }
-    });
-    
-    const nextNumber = lastInvoice 
-      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
-      : 1;
-    
-    const invoiceNumber = `FAC-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+    // Generate unique invoice number
+    const invoiceNumber = await generateUniqueInvoiceNumber(prisma);
 
     // Calculate items and total
     const items = assignments.map(assignment => {
@@ -627,12 +817,23 @@ router.post('/student', authenticateToken, canManageAccounting, async (req, res)
 
     // Create invoice in transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Double-check that the invoice number is still unique
+      const existingInvoice = await tx.invoice.findUnique({
+        where: { invoiceNumber }
+      });
+
+      if (existingInvoice) {
+        throw new Error('Número de factura duplicado');
+      }
+
       // Create invoice
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
           studentId,
           concept: 'EVENT',
+          subtotal: totalAmount,
+          tax: 0,
           total: totalAmount,
           status: 'PENDING',
           dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
@@ -670,9 +871,63 @@ router.post('/student', authenticateToken, canManageAccounting, async (req, res)
   }
 });
 
-// Generate external invoice
+// Función mejorada para generar números de factura únicos
+async function generateUniqueInvoiceNumber(prisma, retries = 5) {
+  const currentYear = new Date().getFullYear();
+  
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      // Usar transacción para evitar condiciones de carrera
+      const result = await prisma.$transaction(async (tx) => {
+        // Obtener el último número del año actual con bloqueo
+        const lastInvoice = await tx.invoice.findFirst({
+          where: {
+            invoiceNumber: {
+              startsWith: `FAC-${currentYear}-`
+            }
+          },
+          orderBy: { invoiceNumber: 'desc' }
+        });
+
+        let nextNumber = 1;
+        if (lastInvoice) {
+          const parts = lastInvoice.invoiceNumber.split('-');
+          if (parts.length === 3) {
+            nextNumber = parseInt(parts[2]) + 1;
+          }
+        }
+
+        const invoiceNumber = `FAC-${currentYear}-${nextNumber.toString().padStart(6, '0')}`;
+
+        // Verificar que no existe (doble verificación)
+        const existing = await tx.invoice.findUnique({
+          where: { invoiceNumber }
+        });
+
+        if (existing) {
+          throw new Error('Número de factura ya existe');
+        }
+
+        return invoiceNumber;
+      });
+
+      return result;
+    } catch (error) {
+      if (attempt === retries - 1) {
+        throw new Error('No se pudo generar un número de factura único: ' + error.message);
+      }
+      
+      // Esperar un tiempo aleatorio antes del siguiente intento
+      await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
+    }
+  }
+}
+
+// Generate external invoice - Improved version with unique number generation
 router.post('/external', authenticateToken, canManageAccounting, async (req, res) => {
   try {
+    console.log('📄 External invoice request received:', req.body);
+    
     const { 
       clientName, 
       clientDocument, 
@@ -686,35 +941,51 @@ router.post('/external', authenticateToken, canManageAccounting, async (req, res
 
     // Validate required fields
     if (!clientName || !clientDocument || !concept || !dueDate || !items || items.length === 0) {
+      console.error('❌ Missing required fields:', {
+        clientName: !!clientName,
+        clientDocument: !!clientDocument,
+        concept: !!concept,
+        dueDate: !!dueDate,
+        items: items?.length || 0
+      });
       return res.status(400).json({ error: 'Datos requeridos faltantes' });
     }
 
-    // Generate invoice number
-    const lastInvoice = await prisma.invoice.findFirst({
-      orderBy: { invoiceNumber: 'desc' }
-    });
-    
-    const nextNumber = lastInvoice 
-      ? parseInt(lastInvoice.invoiceNumber.split('-')[2]) + 1 
-      : 1;
-    
-    const invoiceNumber = `FAC-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+    // Generate unique invoice number
+    const invoiceNumber = await generateUniqueInvoiceNumber(prisma);
 
     // Calculate total
     const totalAmount = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
 
+    console.log('💰 Calculated total:', totalAmount);
+    console.log('🔢 Invoice number:', invoiceNumber);
+
     // Create invoice in transaction
     const result = await prisma.$transaction(async (tx) => {
+      console.log('🔄 Starting transaction...');
+      
+      // Double-check that the invoice number is still unique
+      const existingInvoice = await tx.invoice.findUnique({
+        where: { invoiceNumber }
+      });
+
+      if (existingInvoice) {
+        throw new Error('Número de factura duplicado');
+      }
+      
       // Create invoice
       const invoice = await tx.invoice.create({
         data: {
           invoiceNumber,
           concept,
+          subtotal: totalAmount, // Educational services are tax-exempt
+          tax: 0, // No tax for educational services
           total: totalAmount,
           status: 'PENDING',
           dueDate: new Date(dueDate),
           observations: observations || null,
           userId: req.user.id,
+          type: 'OUTGOING', // Explicitly set type
           // External client data
           clientName,
           clientDocument,
@@ -735,6 +1006,7 @@ router.post('/external', authenticateToken, canManageAccounting, async (req, res
         }
       });
 
+      console.log('✅ Invoice created successfully:', invoice.invoiceNumber);
       return invoice;
     });
 
@@ -744,8 +1016,46 @@ router.post('/external', authenticateToken, canManageAccounting, async (req, res
     });
 
   } catch (error) {
-    console.error('External invoice generation error:', error);
-    res.status(500).json({ error: 'Error al generar factura externa' });
+    console.error('❌ External invoice generation error:', error);
+    console.error('Error details:', {
+      message: error.message,
+      code: error.code,
+      meta: error.meta,
+      stack: error.stack
+    });
+    
+    // More specific error messages
+    if (error.code === 'P2002' || error.message.includes('duplicado')) {
+      return res.status(400).json({ error: 'Número de factura duplicado' });
+    } else if (error.code === 'P2003') {
+      return res.status(400).json({ error: 'Error de referencia en la base de datos' });
+    } else if (error.message.includes('required')) {
+      return res.status(400).json({ error: 'Faltan campos requeridos: ' + error.message });
+    }
+    
+    res.status(500).json({ 
+      error: 'Error al generar factura externa',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Test endpoint for external invoices (debugging)
+router.post('/external/test', authenticateToken, async (req, res) => {
+  try {
+    console.log('🧪 Test external invoice endpoint called');
+    console.log('User:', req.user);
+    console.log('Body:', req.body);
+    
+    res.json({
+      message: 'Test endpoint working',
+      user: req.user.name,
+      timestamp: new Date().toISOString(),
+      bodyReceived: req.body
+    });
+  } catch (error) {
+    console.error('Test endpoint error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 

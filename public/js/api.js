@@ -123,6 +123,43 @@ class API {
         return this.get('/dashboard/recent-activities');
     }
 
+    async getDashboardChartData(chartType) {
+        return this.get(`/dashboard/charts/${chartType}`);
+    }
+
+    // Institution endpoints
+    async getInstitution() {
+        return this.get('/institution');
+    }
+
+    async updateInstitution(data) {
+        return this.put('/institution', data);
+    }
+
+    async uploadLogo(formData) {
+        const token = localStorage.getItem('token');
+        return fetch('/api/institution/logo', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        }).then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        });
+    }
+
+    async deleteLogo() {
+        return this.delete('/institution/logo');
+    }
+
+    async getDashboardActivities() {
+        return this.get('/dashboard/recent-activities');
+    }
+
     async getMonthlyIncomeChart(year = new Date().getFullYear()) {
         return this.get(`/dashboard/charts/monthly-income?year=${year}`);
     }

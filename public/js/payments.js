@@ -274,8 +274,16 @@ async function savePayment() {
             showNotification('Pago actualizado exitosamente', 'success');
         } else {
             // Create new payment
-            await api.createPayment(paymentData);
+            const result = await api.createPayment(paymentData);
             showNotification('Pago registrado exitosamente', 'success');
+
+            // Notify dashboard of new payment
+            if (typeof notifyPaymentMade === 'function') {
+                notifyPaymentMade({
+                    amount: paymentData.amount,
+                    concept: paymentData.concept || 'OTHER'
+                });
+            }
         }
         
         // Close modal and reload data

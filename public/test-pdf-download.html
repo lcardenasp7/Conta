@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prueba de Descarga de PDFs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        .warning { color: #ffc107; }
+        .info { color: #17a2b8; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button.success {
+            background: #28a745;
+        }
+        button.danger {
+            background: #dc3545;
+        }
+        #console {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            height: 400px;
+            overflow-y: auto;
+            margin-top: 20px;
+            font-size: 12px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 Prueba de Descarga de PDFs</h1>
+        
+        <div id="status" class="status warning">
+            <strong>Estado:</strong> Esperando pruebas...
+        </div>
+        
+        <p>Esta página diagnostica y prueba la descarga de facturas en PDF.</p>
+        
+        <div>
+            <button onclick="runAllTests()" class="success">🚀 Ejecutar Todas las Pruebas</button>
+            <button onclick="testSingleInvoice()">📄 Probar Una Factura</button>
+            <button onclick="testMultiple()">📚 Probar Múltiples</button>
+            <button onclick="checkServer()">🖥️ Verificar Servidor</button>
+            <button onclick="clearConsole()">🧹 Limpiar</button>
+        </div>
+        
+        <div>
+            <h3>Pruebas Específicas:</h3>
+            <button onclick="testOriginalFunction()">🔧 Función Original</button>
+            <button onclick="testDirectEndpoint()">📡 Endpoint Directo</button>
+            <button onclick="debugDownload()">🔍 Debug Detallado</button>
+        </div>
+        
+        <div id="console"></div>
+    </div>
+
+    <script>
+        // Redirigir console.log a nuestro div
+        const consoleDiv = document.getElementById('console');
+        const statusDiv = document.getElementById('status');
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        function addToConsole(message, type = 'log') {
+            const timestamp = new Date().toLocaleTimeString();
+            const div = document.createElement('div');
+            div.innerHTML = `<span style="color: #666">[${timestamp}]</span> ${message}`;
+            
+            if (type === 'error') div.style.color = '#ff6b6b';
+            if (type === 'warn') div.style.color = '#ffd93d';
+            if (type === 'info') div.style.color = '#74c0fc';
+            
+            consoleDiv.appendChild(div);
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        function updateStatus(message, type = 'warning') {
+            statusDiv.className = `status ${type}`;
+            statusDiv.innerHTML = `<strong>Estado:</strong> ${message}`;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole(args.join(' '), 'log');
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole(args.join(' '), 'error');
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole(args.join(' '), 'warn');
+        };
+        
+        function clearConsole() {
+            consoleDiv.innerHTML = '';
+            updateStatus('Consola limpiada', 'warning');
+        }
+        
+        // Función para probar descarga directa
+        async function testDirectDownload(invoiceId) {
+            console.log('📥 Probando descarga directa para:', invoiceId);
+            
+            try {
+                const token = localStorage.getItem('token');
+                if (!token) {
+                    throw new Error('No hay token de autenticación');
+                }
+                
+                const response = await fetch(`/api/invoices/${invoiceId}/pdf`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                console.log('📊 Respuesta:', response.status, response.statusText);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText}`);
+                }
+                
+                const blob = await response.blob();
+                console.log('📦 Blob:', blob.size, 'bytes, tipo:', blob.type);
+                
+                if (blob.size === 0) {
+                    throw new Error('El PDF está vacío');
+                }
+                
+                // Crear descarga
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Test_${invoiceId}.pdf`;
+                
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                
+                console.log('✅ Descarga exitosa');
+                return true;
+                
+            } catch (error) {
+                console.error('❌ Error en descarga:', error);
+                return false;
+            }
+        }
+        
+        // Función para obtener facturas
+        async function getInvoices(limit = 1) {
+            try {
+                const response = await fetch(`/api/invoices?limit=${limit}`, {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`Error obteniendo facturas: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data.invoices || [];
+                
+            } catch (error) {
+                console.error('❌ Error obteniendo facturas:', error);
+                return [];
+            }
+        }
+        
+        // Funciones de prueba
+        async function runAllTests() {
+            console.log('🚀 Ejecutando todas las pruebas...');
+            updateStatus('Ejecutando pruebas...', 'warning');
+            
+            try {
+                // 1. Verificar servidor
+                await checkServer();
+                
+                // 2. Probar una factura
+                await testSingleInvoice();
+                
+                // 3. Probar función original
+                await testOriginalFunction();
+                
+                updateStatus('Todas las pruebas completadas', 'success');
+                
+            } catch (error) {
+                console.error('❌ Error en pruebas:', error);
+                updateStatus('Error en las pruebas', 'error');
+            }
+        }
+        
+        async function testSingleInvoice() {
+            console.log('📄 Probando una factura...');
+            
+            const invoices = await getInvoices(1);
+            if (invoices.length === 0) {
+                console.log('⚠️ No hay facturas disponibles');
+                return false;
+            }
+            
+            const invoice = invoices[0];
+            console.log('🎯 Probando con:', invoice.invoiceNumber);
+            
+            return await testDirectDownload(invoice.id);
+        }
+        
+        async function testMultiple() {
+            console.log('📚 Probando múltiples facturas...');
+            
+            const invoices = await getInvoices(3);
+            if (invoices.length === 0) {
+                console.log('⚠️ No hay facturas disponibles');
+                return false;
+            }
+            
+            let successCount = 0;
+            
+            for (const invoice of invoices) {
+                console.log(`\n🧪 Probando: ${invoice.invoiceNumber}`);
+                const success = await testDirectDownload(invoice.id);
+                if (success) successCount++;
+                
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            
+            console.log(`\n📊 Resultados: ${successCount}/${invoices.length} exitosas`);
+            return successCount === invoices.length;
+        }
+        
+        async function checkServer() {
+            console.log('🖥️ Verificando servidor...');
+            
+            try {
+                const response = await fetch('/api/invoices', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                
+                console.log('📡 Servidor:', response.ok ? '✅ OK' : '❌ Error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('📄 Facturas disponibles:', data.invoices?.length || 0);
+                }
+                
+                return response.ok;
+                
+            } catch (error) {
+                console.error('❌ Error verificando servidor:', error);
+                return false;
+            }
+        }
+        
+        async function testOriginalFunction() {
+            console.log('🔧 Probando función original downloadInvoice...');
+            
+            if (typeof downloadInvoice !== 'function') {
+                console.log('⚠️ Función downloadInvoice no disponible');
+                return false;
+            }
+            
+            const invoices = await getInvoices(1);
+            if (invoices.length === 0) {
+                console.log('⚠️ No hay facturas disponibles');
+                return false;
+            }
+            
+            try {
+                await downloadInvoice(invoices[0].id);
+                console.log('✅ Función original ejecutada');
+                return true;
+            } catch (error) {
+                console.error('❌ Error en función original:', error);
+                return false;
+            }
+        }
+        
+        async function testDirectEndpoint() {
+            console.log('📡 Probando endpoint directo...');
+            await testSingleInvoice();
+        }
+        
+        async function debugDownload() {
+            console.log('🔍 Debug detallado de descarga...');
+            
+            const invoices = await getInvoices(1);
+            if (invoices.length === 0) {
+                console.log('⚠️ No hay facturas disponibles');
+                return;
+            }
+            
+            const invoice = invoices[0];
+            console.log('🎯 Debug para factura:', invoice.invoiceNumber);
+            console.log('🆔 ID:', invoice.id);
+            console.log('📅 Fecha:', invoice.date);
+            console.log('💰 Total:', invoice.total);
+            
+            // Probar paso a paso
+            try {
+                const token = localStorage.getItem('token');
+                console.log('🔑 Token:', token ? 'Disponible' : 'No disponible');
+                
+                const url = `/api/invoices/${invoice.id}/pdf`;
+                console.log('🔗 URL:', url);
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                console.log('📊 Response status:', response.status);
+                console.log('📊 Response statusText:', response.statusText);
+                console.log('📊 Response ok:', response.ok);
+                
+                // Mostrar headers
+                console.log('📋 Response headers:');
+                for (let [key, value] of response.headers.entries()) {
+                    console.log(`   ${key}: ${value}`);
+                }
+                
+                if (response.ok) {
+                    const blob = await response.blob();
+                    console.log('📦 Blob size:', blob.size);
+                    console.log('📦 Blob type:', blob.type);
+                    
+                    if (blob.size > 0) {
+                        console.log('✅ PDF válido recibido');
+                        
+                        // Intentar descarga
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `Debug_${invoice.invoiceNumber}.pdf`;
+                        
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        
+                        setTimeout(() => URL.revokeObjectURL(url), 1000);
+                        
+                        console.log('✅ Descarga debug ejecutada');
+                    } else {
+                        console.log('❌ PDF vacío');
+                    }
+                } else {
+                    const errorText = await response.text();
+                    console.log('❌ Error response:', errorText);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error en debug:', error);
+            }
+        }
+        
+        // Inicialización
+        console.log('🧪 Página de prueba de PDF cargada');
+        console.log('💡 Haz clic en los botones para ejecutar las pruebas');
+        
+        // Auto-verificar servidor al cargar
+        setTimeout(checkServer, 1000);
+    </script>
+</body>
+</html>

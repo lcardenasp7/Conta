@@ -69,16 +69,29 @@ function populateInstitutionForm(data) {
     // Logo (si existe)
     if (data.logo) {
         const logoPreview = document.getElementById('logoPreview');
+        const logoPreviewSmall = document.getElementById('logoPreviewSmall');
+        const logoPlaceholder = document.getElementById('logoPlaceholder');
+        const logoActions = document.getElementById('logoActions');
+
         if (logoPreview) {
             logoPreview.src = data.logo;
             logoPreview.style.display = 'block';
         }
+        if (logoPreviewSmall) {
+            logoPreviewSmall.src = data.logo;
+            logoPreviewSmall.style.display = 'block';
+        }
+        if (logoPlaceholder) logoPlaceholder.style.display = 'none';
+        if (logoActions) logoActions.style.display = 'block';
     }
+
+    // Update preview
+    updateInstitutionPreview(data);
 }
 
 // Set form value helper
 function setFormValue(fieldName, value) {
-    const field = document.getElementById(fieldName);
+    const field = document.getElementById('institution' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1));
     if (field && value !== null && value !== undefined) {
         field.value = value;
     }
@@ -151,7 +164,7 @@ async function handleInstitutionSubmit(event) {
 }
 
 // Handle logo upload
-function handleLogoUpload(event) {
+async function handleLogoUpload(event) {
     const file = event.target.files[0];
     if (!file) return;
     
@@ -171,16 +184,79 @@ function handleLogoUpload(event) {
         return;
     }
     
-    // Mostrar preview
-    const reader = new FileReader();
-    reader.onload = function(e) {
+    try {
+        showLoading(true);
+        
+        // Crear FormData para el upload
+        const formData = new FormData();
+        formData.append('logo', file);
+        
+        // Subir logo usando fetch directo
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/institution/logo', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error ${response.status}: ${response.statusText}`);
+        }
+
+        const result = await response.json();
+        
+        // Mostrar preview
         const preview = document.getElementById('logoPreview');
+        const previewSmall = document.getElementById('logoPreviewSmall');
+        const placeholder = document.getElementById('logoPlaceholder');
+        const actions = document.getElementById('logoActions');
+
         if (preview) {
-            preview.src = e.target.result;
+            preview.src = result.logoPath;
             preview.style.display = 'block';
         }
-    };
-    reader.readAsDataURL(file);
+        if (previewSmall) {
+            previewSmall.src = result.logoPath;
+            previewSmall.style.display = 'block';
+        }
+        if (placeholder) placeholder.style.display = 'none';
+        if (actions) actions.style.display = 'block';
+        
+        // Actualizar datos institucionales
+        if (institutionData) {
+            institutionData.logo = result.logoPath;
+        }
+        
+        showNotification('Logo cargado exitosamente', 'success');
+        
+        // Actualizar logo en toda la aplicación
+        updateInstitutionLogo(result.logoPath);
+        
+    } catch (error) {
+        console.error('Error uploading logo:', error);
+        showNotification('Error al cargar el logo: ' + error.message, 'error');
+        event.target.value = '';
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Update logo throughout the application
+function updateInstitutionLogo(logoPath) {
+    // Update all logo elements in the app
+    document.querySelectorAll('.institution-logo').forEach(element => {
+        element.src = logoPath;
+        element.style.display = 'block';
+    });
+    
+    // Update sidebar logo if exists
+    const sidebarLogo = document.querySelector('.sidebar-logo');
+    if (sidebarLogo) {
+        sidebarLogo.src = logoPath;
+        sidebarLogo.style.display = 'block';
+    }
 }
 
 // Reset institution form
@@ -271,6 +347,91 @@ function getInstitutionData() {
     return institutionData;
 }
 
+// Save institution data
+async function saveInstitutionData() {
+    const form = document.getElementById('institutionForm');
+    if (!form) return;
+
+    try {
+        showLoading(true);
+
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+
+        // Validate required fields
+        const requiredFields = ['name', 'nit', 'address', 'city', 'phone', 'email'];
+        const missingFields = requiredFields.filter(field => !data[field]);
+
+        if (missingFields.length > 0) {
+            throw new Error(`Campos requeridos faltantes: ${missingFields.join(', ')}`);
+        }
+
+        // Validate email format
+        if (data.email && !isValidEmail(data.email)) {
+            throw new Error('Formato de email inválido');
+        }
+
+        const result = await api.updateInstitution(data);
+        institutionData = result;
+
+        showNotification('Configuración institucional guardada exitosamente', 'success');
+        updateInstitutionPreview(result);
+
+    } catch (error) {
+        console.error('Error saving institution:', error);
+        showNotification(error.message || 'Error al guardar configuración', 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Delete logo
+async function deleteLogo() {
+    if (!confirm('¿Está seguro de que desea eliminar el logo?')) {
+        return;
+    }
+
+    try {
+        showLoading(true);
+
+        await api.deleteLogo();
+
+        // Clear logo preview
+        const logoPreview = document.getElementById('logoPreview');
+        const logoPlaceholder = document.getElementById('logoPlaceholder');
+        const logoActions = document.getElementById('logoActions');
+
+        if (logoPreview) {
+            logoPreview.style.display = 'none';
+            logoPreview.src = '';
+        }
+        if (logoPlaceholder) logoPlaceholder.style.display = 'block';
+        if (logoActions) logoActions.style.display = 'none';
+
+        // Update institution data
+        if (institutionData) {
+            institutionData.logo = null;
+        }
+
+        showNotification('Logo eliminado exitosamente', 'success');
+
+    } catch (error) {
+        console.error('Error deleting logo:', error);
+        showNotification('Error al eliminar el logo: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Update institution preview
+function updateInstitutionPreview(data) {
+    const previewName = document.getElementById('previewName');
+    const previewNit = document.getElementById('previewNit');
+
+    if (previewName) previewName.textContent = data.name || 'Nombre de la Institución';
+    if (previewNit) previewNit.textContent = `NIT: ${data.nit || '000000000-0'}`;
+}
+
 // Export functions for global use
 window.institutionManager = {
     init: initInstitution,
@@ -278,3 +439,143 @@ window.institutionManager = {
     getData: getInstitutionData,
     update: updateInstitutionDisplay
 };
+
+// Show logo history
+async function showLogoHistory() {
+    try {
+        showLoading(true);
+        
+        const response = await fetch('/api/institution/logo/history', {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al obtener historial');
+        }
+
+        const data = await response.json();
+        
+        if (data.backups.length === 0) {
+            showNotification('No hay logos anteriores guardados', 'info');
+            return;
+        }
+
+        // Create modal content
+        const backupsHtml = data.backups.map(backup => `
+            <div class="d-flex justify-content-between align-items-center border-bottom py-2">
+                <div>
+                    <strong>${backup.createdAt.toLocaleString()}</strong><br>
+                    <small class="text-muted">${backup.sizeFormatted}</small>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-outline-primary me-2" onclick="previewLogo('${backup.path}')">
+                        <i class="bi bi-eye"></i> Ver
+                    </button>
+                    <button class="btn btn-sm btn-success" onclick="restoreLogo('${backup.filename}')">
+                        <i class="bi bi-arrow-clockwise"></i> Restaurar
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+        await Swal.fire({
+            title: 'Historial de Logos',
+            html: `
+                <div class="text-start">
+                    <p class="text-muted mb-3">Logos anteriores guardados automáticamente:</p>
+                    ${backupsHtml}
+                </div>
+            `,
+            width: '600px',
+            showConfirmButton: false,
+            showCancelButton: true,
+            cancelButtonText: 'Cerrar'
+        });
+
+    } catch (error) {
+        console.error('Error showing logo history:', error);
+        showNotification('Error al mostrar historial: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Preview logo
+function previewLogo(logoPath) {
+    Swal.fire({
+        title: 'Vista Previa del Logo',
+        imageUrl: logoPath,
+        imageWidth: 300,
+        imageHeight: 300,
+        imageAlt: 'Logo anterior',
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: 'Cerrar'
+    });
+}
+
+// Restore logo
+async function restoreLogo(filename) {
+    const result = await Swal.fire({
+        title: '¿Restaurar este logo?',
+        text: 'El logo actual será reemplazado por este logo anterior',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Sí, restaurar',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (!result.isConfirmed) return;
+
+    try {
+        showLoading(true);
+
+        const response = await fetch(`/api/institution/logo/restore/${filename}`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al restaurar logo');
+        }
+
+        const data = await response.json();
+        
+        // Update preview
+        const logoPreview = document.getElementById('logoPreview');
+        const logoPreviewSmall = document.getElementById('logoPreviewSmall');
+        
+        if (logoPreview) {
+            logoPreview.src = data.logoPath + '?t=' + Date.now(); // Cache bust
+            logoPreview.style.display = 'block';
+        }
+        if (logoPreviewSmall) {
+            logoPreviewSmall.src = data.logoPath + '?t=' + Date.now();
+            logoPreviewSmall.style.display = 'block';
+        }
+
+        showNotification('Logo restaurado exitosamente', 'success');
+        
+        // Close any open modals
+        Swal.close();
+
+    } catch (error) {
+        console.error('Error restoring logo:', error);
+        showNotification('Error al restaurar logo: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
+// Export individual functions for global access
+window.initInstitution = initInstitution;
+window.saveInstitutionData = saveInstitutionData;
+window.deleteLogo = deleteLogo;
+window.resetInstitutionForm = resetInstitutionForm;
+window.showLogoHistory = showLogoHistory;
+window.previewLogo = previewLogo;
+window.restoreLogo = restoreLogo;

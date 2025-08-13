@@ -35,12 +35,17 @@ function updateDashboardStats(stats) {
     // Estadísticas principales
     const summary = stats.summary || {};
     const income = stats.income || {};
+    const expenses = stats.expenses || {};
+    const balance = stats.balance || {};
     const debts = stats.debts || {};
     const metrics = stats.metrics || {};
     
     // Actualizar tarjetas principales
     updateStatCard('totalStudents', summary.activeStudents, summary.totalStudents);
     updateStatCard('monthlyIncome', formatCurrency(income.thisMonth), 'Este mes');
+    updateStatCard('monthlyExpenses', formatCurrency(expenses.thisMonth), 'Este mes');
+    updateStatCard('monthlyBalance', formatCurrency(balance.thisMonth), 
+        balance.thisMonth >= 0 ? 'Positivo' : 'Negativo');
     updateStatCard('pendingInvoices', summary.pendingInvoices, `${summary.overdueInvoices} vencidas`);
     updateStatCard('activeEvents', summary.activeEvents, `${summary.totalEvents} total`);
     
@@ -50,8 +55,12 @@ function updateDashboardStats(stats) {
     updateMetricCard('totalDebtAmount', formatCurrency(debts.totalAmount), `${debts.totalDebtors} deudores`);
     updateMetricCard('averageDebtPerStudent', formatCurrency(metrics.averageDebtPerStudent), 'Promedio');
     
-    // Actualizar ingresos detallados
-    updateIncomeDetails(income);
+    // Actualizar ingresos y egresos detallados
+    updateFinancialDetails(income, expenses, balance);
+    
+    // Actualizar categorías
+    updateIncomeCategories(income.categories || []);
+    updateExpenseCategories(expenses.categories || []);
 }
 
 // Actualizar tarjeta de estadística
@@ -76,13 +85,62 @@ function updateMetricCard(elementId, value, suffix) {
     }
 }
 
-// Actualizar detalles de ingresos
-function updateIncomeDetails(income) {
-    const todayElement = document.getElementById('todayIncome');
-    const yearElement = document.getElementById('yearIncome');
+// Actualizar detalles financieros
+function updateFinancialDetails(income, expenses, balance) {
+    const todayIncomeElement = document.getElementById('todayIncome');
+    const yearIncomeElement = document.getElementById('yearIncome');
+    const yearExpensesElement = document.getElementById('yearExpenses');
+    const yearBalanceElement = document.getElementById('yearBalance');
     
-    if (todayElement) todayElement.textContent = formatCurrency(income.today || 0);
-    if (yearElement) yearElement.textContent = formatCurrency(income.thisYear || 0);
+    if (todayIncomeElement) todayIncomeElement.textContent = formatCurrency(income.today || 0);
+    if (yearIncomeElement) yearIncomeElement.textContent = formatCurrency(income.thisYear || 0);
+    if (yearExpensesElement) yearExpensesElement.textContent = formatCurrency(expenses.thisYear || 0);
+    if (yearBalanceElement) {
+        yearBalanceElement.textContent = formatCurrency(balance.thisYear || 0);
+        yearBalanceElement.className = balance.thisYear >= 0 ? 'text-success' : 'text-danger';
+    }
+}
+
+// Actualizar categorías de ingresos
+function updateIncomeCategories(categories) {
+    const container = document.getElementById('incomeCategories');
+    if (!container) return;
+    
+    if (categories.length === 0) {
+        container.innerHTML = '<p class="text-muted">No hay ingresos este mes</p>';
+        return;
+    }
+    
+    container.innerHTML = categories.map(category => `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex align-items-center">
+                <div class="category-color me-2" style="background-color: ${category.color}; width: 12px; height: 12px; border-radius: 50%;"></div>
+                <span>${category.name}</span>
+            </div>
+            <strong>${formatCurrency(category.amount)}</strong>
+        </div>
+    `).join('');
+}
+
+// Actualizar categorías de egresos
+function updateExpenseCategories(categories) {
+    const container = document.getElementById('expenseCategories');
+    if (!container) return;
+    
+    if (categories.length === 0) {
+        container.innerHTML = '<p class="text-muted">No hay gastos este mes</p>';
+        return;
+    }
+    
+    container.innerHTML = categories.map(category => `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <div class="d-flex align-items-center">
+                <div class="category-color me-2" style="background-color: ${category.color}; width: 12px; height: 12px; border-radius: 50%;"></div>
+                <span>${category.name}</span>
+            </div>
+            <strong>${formatCurrency(category.amount)}</strong>
+        </div>
+    `).join('');
 }
 
 // Actualizar actividades recientes
@@ -239,17 +297,86 @@ async function loadIncomeExpenseChart() {
         incomeExpenseChart.destroy();
     }
     
-    // Sample data - replace with real API call
+    try {
+        // Try to get real data from API
+        const response = await api.getDashboardChartData('monthly-income-expense');
+        const chartData = response;
+        
+        const data = {
+            labels: chartData.labels,
+            datasets: [
+                {
+                    label: 'Ingresos',
+                    data: chartData.income,
+                    backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                    borderColor: 'rgba(46, 204, 113, 1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                },
+                {
+                    label: 'Gastos',
+                    data: chartData.expenses,
+                    backgroundColor: 'rgba(231, 76, 60, 0.2)',
+                    borderColor: 'rgba(231, 76, 60, 1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4
+                }
+            ]
+        };
+        
+        incomeExpenseChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'top',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Ingresos vs Gastos Mensuales'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return formatCurrency(value);
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index'
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading income/expense chart:', error);
+        // Fallback to sample data
+        loadSampleIncomeExpenseChart(ctx);
+    }
+}
+
+// Fallback chart with sample data
+function loadSampleIncomeExpenseChart(ctx) {
     const data = {
         labels: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio'],
         datasets: [
             {
                 label: 'Ingresos',
                 data: [1200000, 1350000, 1100000, 1450000, 1300000, 1500000],
-                backgroundColor: 'rgba(52, 152, 219, 0.2)',
-                borderColor: 'rgba(52, 152, 219, 1)',
+                backgroundColor: 'rgba(46, 204, 113, 0.2)',
+                borderColor: 'rgba(46, 204, 113, 1)',
                 borderWidth: 2,
-                fill: true
+                fill: true,
+                tension: 0.4
             },
             {
                 label: 'Gastos',
@@ -257,7 +384,8 @@ async function loadIncomeExpenseChart() {
                 backgroundColor: 'rgba(231, 76, 60, 0.2)',
                 borderColor: 'rgba(231, 76, 60, 1)',
                 borderWidth: 2,
-                fill: true
+                fill: true,
+                tension: 0.4
             }
         ]
     };
@@ -273,7 +401,8 @@ async function loadIncomeExpenseChart() {
                     position: 'top',
                 },
                 title: {
-                    display: false
+                    display: true,
+                    text: 'Ingresos vs Gastos Mensuales (Datos de Ejemplo)'
                 }
             },
             scales: {
@@ -304,7 +433,64 @@ async function loadIncomeDistributionChart() {
         incomeDistributionChart.destroy();
     }
     
-    // Sample data - replace with real API call
+    try {
+        // Get current dashboard stats to use income categories
+        const stats = await api.getDashboardStats();
+        const categories = stats.income?.categories || [];
+        
+        if (categories.length === 0) {
+            // Show empty state
+            ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
+            return;
+        }
+        
+        const data = {
+            labels: categories.map(cat => cat.name),
+            datasets: [{
+                data: categories.map(cat => cat.amount),
+                backgroundColor: categories.map(cat => cat.color + 'CC'), // Add transparency
+                borderColor: categories.map(cat => cat.color),
+                borderWidth: 2
+            }]
+        };
+        
+        incomeDistributionChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                    title: {
+                        display: true,
+                        text: 'Distribución de Ingresos por Categoría'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = formatCurrency(context.parsed);
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading income distribution chart:', error);
+        // Fallback to sample data
+        loadSampleIncomeDistributionChart(ctx);
+    }
+}
+
+// Fallback chart with sample data
+function loadSampleIncomeDistributionChart(ctx) {
     const data = {
         labels: ['Matrículas', 'Mensualidades', 'Eventos', 'Uniformes', 'Otros'],
         datasets: [{
@@ -338,7 +524,8 @@ async function loadIncomeDistributionChart() {
                     position: 'bottom',
                 },
                 title: {
-                    display: false
+                    display: true,
+                    text: 'Distribución de Ingresos (Datos de Ejemplo)'
                 }
             }
         }
@@ -501,6 +688,54 @@ function stopDashboardUpdates() {
 }
 
 // Export functions for global access
+// Get category text for income
+function getCategoryText(concept) {
+    const categories = {
+        'TUITION': 'Matrícula',
+        'MONTHLY': 'Mensualidad',
+        'EVENT': 'Evento',
+        'UNIFORM': 'Uniforme',
+        'BOOKS': 'Libros',
+        'TRANSPORT': 'Transporte',
+        'CAFETERIA': 'Cafetería',
+        'OTHER': 'Otros'
+    };
+    return categories[concept] || concept;
+}
+
+// Get category text for expenses
+function getExpenseCategoryText(concept) {
+    const categories = {
+        'OFFICE_SUPPLIES': 'Útiles de Oficina',
+        'MAINTENANCE': 'Mantenimiento',
+        'UTILITIES': 'Servicios Públicos',
+        'PROFESSIONAL_SERVICES': 'Servicios Profesionales',
+        'EQUIPMENT': 'Equipos',
+        'CLEANING_SUPPLIES': 'Insumos de Aseo',
+        'FOOD_SUPPLIES': 'Insumos de Cafetería',
+        'EDUCATIONAL_MATERIALS': 'Material Educativo',
+        'TECHNOLOGY': 'Tecnología',
+        'INSURANCE': 'Seguros',
+        'RENT': 'Arrendamiento',
+        'OTHER': 'Otros'
+    };
+    return categories[concept] || concept;
+}
+
+// Trigger dashboard update after expense (incoming invoice)
+function notifyExpenseRecorded(expenseData) {
+    console.log('💸 Expense notification received:', expenseData);
+    
+    // Update dashboard immediately
+    updateDashboardRealTime();
+    
+    // Show notification with category information
+    const categoryText = getExpenseCategoryText(expenseData.concept || 'OTHER');
+    if (typeof showSuccess === 'function') {
+        showSuccess(`Gasto registrado: ${formatCurrency(expenseData.amount)} - ${categoryText}`);
+    }
+}
+
 window.loadDashboard = loadDashboard;
 window.refreshDashboard = refreshDashboard;
 window.exportDashboard = exportDashboardData;
@@ -508,4 +743,5 @@ window.initDashboard = initDashboard;
 window.updateDashboardRealTime = updateDashboardRealTime;
 window.notifyPaymentMade = notifyPaymentMade;
 window.notifyInvoiceGenerated = notifyInvoiceGenerated;
+window.notifyExpenseRecorded = notifyExpenseRecorded;
 window.stopDashboardUpdates = stopDashboardUpdates;

@@ -369,9 +369,17 @@ async function showCreateExternalInvoiceModal() {
                 isExternal: true
             };
 
-            await api.createExternalInvoice(invoiceData);
+            const invoiceResult = await api.createExternalInvoice(invoiceData);
 
             showSuccess('Factura externa creada exitosamente');
+
+            // Notify dashboard of new invoice
+            if (typeof notifyInvoiceGenerated === 'function') {
+                notifyInvoiceGenerated({
+                    invoiceNumber: invoiceResult.invoice?.invoiceNumber || 'N/A',
+                    concept: invoiceData.concept || 'OTHER'
+                });
+            }
 
             // Reload invoices
             await loadInvoices();
@@ -536,9 +544,62 @@ function viewInvoice(invoiceId) {
     showNotification('Función de vista en desarrollo', 'info');
 }
 
-function downloadInvoice(invoiceId) {
-    console.log('Download invoice:', invoiceId);
-    showNotification('Función de descarga en desarrollo', 'info');
+async function downloadInvoice(invoiceId) {
+    try {
+        console.log('📥 Iniciando descarga de factura:', invoiceId);
+        showLoading();
+
+        // Descargar PDF de la factura
+        const response = await fetch(`/api/invoices/${invoiceId}/pdf`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `Error HTTP: ${response.status}`);
+        }
+
+        // Verificar que la respuesta es un PDF
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/pdf')) {
+            throw new Error('La respuesta no es un archivo PDF válido');
+        }
+
+        // Crear blob y descargar
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        
+        // Crear elemento de descarga
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Factura_${invoiceId}.pdf`;
+        a.style.display = 'none';
+        
+        // Agregar al DOM, hacer click y remover
+        document.body.appendChild(a);
+        a.click();
+        
+        // Limpiar después de un breve delay
+        setTimeout(() => {
+            window.URL.revokeObjectURL(url);
+            if (document.body.contains(a)) {
+                document.body.removeChild(a);
+            }
+        }, 100);
+
+        showSuccess('Factura descargada exitosamente');
+        console.log('✅ Factura descargada exitosamente');
+
+    } catch (error) {
+        console.error('❌ Error downloading invoice:', error);
+        showError('Error al descargar la factura: ' + error.message);
+    } finally {
+        hideLoading();
+    }
 }
 
 function editInvoice(invoiceId) {
@@ -617,10 +678,12 @@ function showCreateSupplierInvoiceModal() {
         // Remove aria-hidden when modal is shown
         modalElement.removeAttribute('aria-hidden');
         // Focus on first input for better accessibility
-        const firstInput = modalElement.querySelector('input:not([type="hidden"])');
-        if (firstInput) {
-            firstInput.focus();
-        }
+        setTimeout(() => {
+            const firstInput = modalElement.querySelector('input:not([type="hidden"]):not([disabled])');
+            if (firstInput) {
+                firstInput.focus();
+            }
+        }, 100); // Small delay to ensure modal is fully rendered
     });
 
     modalElement.addEventListener('hidden.bs.modal', function () {
@@ -628,6 +691,8 @@ function showCreateSupplierInvoiceModal() {
         modalElement.setAttribute('aria-hidden', 'true');
     });
 
+    // Remove aria-hidden before showing to prevent accessibility issues
+    modalElement.removeAttribute('aria-hidden');
     modal.show();
 }
 

@@ -30,6 +30,9 @@ const financialDashboardRoutes = require('./routes/financial-dashboard.routes');
 const app = express();
 const prisma = new PrismaClient();
 
+// Trust proxy for Railway
+app.set('trust proxy', true);
+
 // Port configuration
 const PORT = process.env.PORT || 3000;
 

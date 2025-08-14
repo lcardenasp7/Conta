@@ -18,6 +18,8 @@
     "db:check": "node scripts/railway-db-check.js",
     "railway:setup": "node scripts/railway-setup.js",
     "railway:debug": "node scripts/railway-debug.js",
+    "railway:seed": "node scripts/railway-seed.js",
+    "import:students": "node scripts/import-students-villas.js",
     "production:check": "node scripts/production-check.js",
     "production:setup": "node scripts/generate-jwt-secret.js && node scripts/optimize-database.js",
     "email:test": "node scripts/test-email.js",

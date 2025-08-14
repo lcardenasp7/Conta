@@ -163,7 +163,65 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-// Seed endpoint - Temporal para inicializar DB
+// Initialize database endpoint - Migraciones + Seed
+app.get('/init-db', async (req, res) => {
+  try {
+    console.log('🎯 Inicializando base de datos completa...');
+    
+    const { spawn } = require('child_process');
+    let output = '';
+    let errorOutput = '';
+    
+    // Función para ejecutar comando
+    const runCommand = (command, args) => {
+      return new Promise((resolve, reject) => {
+        const process = spawn(command, args, { env: process.env });
+        
+        process.stdout.on('data', (data) => {
+          const text = data.toString();
+          output += text;
+          console.log(text);
+        });
+        
+        process.stderr.on('data', (data) => {
+          const text = data.toString();
+          errorOutput += text;
+          console.error(text);
+        });
+        
+        process.on('close', (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`Command failed with code ${code}`));
+        });
+      });
+    };
+    
+    // 1. Ejecutar migraciones
+    console.log('🔄 Ejecutando migraciones...');
+    await runCommand('npx', ['prisma', 'db', 'push', '--accept-data-loss']);
+    
+    // 2. Ejecutar seed
+    console.log('🌱 Ejecutando seed...');
+    await runCommand('node', ['scripts/railway-production-seed.js']);
+    
+    res.json({
+      success: true,
+      message: 'Base de datos inicializada correctamente',
+      output: output
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error inicializando base de datos',
+      error: errorOutput || error.message,
+      output: output
+    });
+  }
+});
+
+// Seed endpoint - Solo seed (requiere tablas existentes)
 app.get('/seed', async (req, res) => {
   try {
     console.log('🌱 Ejecutando seed desde endpoint...');

@@ -1,0 +1,40 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Dashboard Financiero</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div id="contentArea">Cargando...</div>
+    
+    <script>
+        // Simular funciones globales necesarias
+        window.showLoading = () => console.log('Loading...');
+        window.hideLoading = () => console.log('Hide loading...');
+        window.showError = (msg) => console.error('Error:', msg);
+        window.API = {
+            request: async (method, url) => {
+                console.log('API Request:', method, url);
+                return { summary: { totalIncome: 0, totalExpenses: 0, netCashFlow: 0, pendingAmount: 0, pendingCount: 0 }, period: { name: 'Test' }, income: { byCategory: {} }, expenses: { byCategory: {} }, trends: [], recentActivity: [], pending: { invoices: [] } };
+            }
+        };
+    </script>
+    <script src="../public/js/financial-dashboard.js"></script>
+    
+    <script>
+        console.log('initFinancialDashboard available:', typeof initFinancialDashboard);
+        if (typeof initFinancialDashboard === 'function') {
+            console.log('✅ Función disponible, ejecutando...');
+            initFinancialDashboard().then(() => {
+                console.log('✅ Dashboard inicializado exitosamente');
+            }).catch(error => {
+                console.error('❌ Error inicializando dashboard:', error);
+            });
+        } else {
+            console.error('❌ Función initFinancialDashboard no disponible');
+        }
+    </script>
+</body>
+</html>
+    

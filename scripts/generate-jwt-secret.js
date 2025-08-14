@@ -1,36 +1,36 @@
-#!/usr/bin/env node
-
 /**
- * Script para generar JWT_SECRET seguro para producción
- * Uso: node scripts/generate-jwt-secret.js
+ * Generador de JWT Secret seguro para producción
  */
 
 const crypto = require('crypto');
 
-function generateSecureJWTSecret() {
-    // Generar 64 bytes aleatorios y convertir a hex (128 caracteres)
-    const secret = crypto.randomBytes(64).toString('hex');
-    
-    console.log('🔐 JWT_SECRET Seguro Generado:');
-    console.log('=' .repeat(80));
-    console.log(secret);
-    console.log('=' .repeat(80));
-    console.log('');
-    console.log('📋 Para usar en Railway:');
-    console.log(`JWT_SECRET=${secret}`);
-    console.log('');
-    console.log('⚠️  IMPORTANTE:');
-    console.log('- Guarda esta clave de forma segura');
-    console.log('- No la compartas en repositorios públicos');
-    console.log('- Úsala solo en variables de entorno de producción');
-    console.log('- Si la pierdes, todos los tokens existentes serán inválidos');
-    
-    return secret;
-}
+console.log('🔐 GENERADOR DE JWT SECRET PARA PRODUCCIÓN');
+console.log('==========================================');
 
-// Ejecutar si se llama directamente
-if (require.main === module) {
-    generateSecureJWTSecret();
-}
+// Generar un secret de 64 bytes (512 bits)
+const jwtSecret = crypto.randomBytes(64).toString('hex');
 
-module.exports = { generateSecureJWTSecret };
+console.log('\n🔑 JWT SECRET GENERADO:');
+console.log('=======================');
+console.log(jwtSecret);
+console.log('=======================');
+
+console.log('\n📋 INSTRUCCIONES:');
+console.log('1. Copia el JWT_SECRET de arriba');
+console.log('2. En tu plataforma de deployment (Railway/Heroku/Vercel):');
+console.log('   - Ve a Variables de Entorno');
+console.log('   - Agrega: JWT_SECRET = [el valor generado arriba]');
+console.log('3. También agrega: NODE_ENV = production');
+
+console.log('\n⚠️  IMPORTANTE:');
+console.log('- NUNCA compartas este secret públicamente');
+console.log('- Guárdalo en un lugar seguro');
+console.log('- Úsalo solo en variables de entorno de producción');
+
+console.log('\n🔒 CARACTERÍSTICAS DEL SECRET:');
+console.log(`- Longitud: ${jwtSecret.length} caracteres`);
+console.log('- Entropía: 512 bits');
+console.log('- Formato: Hexadecimal');
+console.log('- Seguridad: Criptográficamente seguro');
+
+console.log('\n✅ SECRET LISTO PARA PRODUCCIÓN');

@@ -24,6 +24,7 @@ const transactionRoutes = require('./routes/transaction.routes');
 const accountRoutes = require('./routes/account.routes');
 const reportRoutes = require('./routes/report.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const financialDashboardRoutes = require('./routes/financial-dashboard.routes');
 
 // Initialize Express app
 const app = express();
@@ -170,6 +171,7 @@ app.use('/api/transactions', transactionRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/financial-dashboard', financialDashboardRoutes);
 
 // Static files for uploaded documents
 app.use('/uploads', express.static('uploads'));

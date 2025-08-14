@@ -619,6 +619,31 @@ const pageTemplates = {
                 </div>
                 <div class="card-body">
                     <div id="groupsContainer">
+                        <div class="text-center py-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Cargando grupos...</span>
+                            </div>
+                            <p class="mt-2 text-muted">Cargando grupos...</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `,
+    
+    'financial-dashboard': `
+        <div id="financial-dashboard-content">
+            <div class="text-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Inicializando dashboard financiero...</span>
+                </div>
+                <p class="mt-3">Cargando dashboard financiero...</p>
+            </div>
+        </div> bi-plus"></i> Nuevo Grupo
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div id="groupsContainer">
                         <div class="text-center text-muted py-4">
                             <i class="bi bi-info-circle fs-1"></i>
                             <p class="mt-2">Selecciona un grado para ver sus grupos</p>
@@ -848,6 +873,7 @@ async function loadPage(pageName) {
         events: 'Gestión de Eventos',
         'event-assignments': 'Asignaciones de Eventos',
         'event-reports': 'Reportes de Eventos',
+        'financial-dashboard': 'Dashboard Financiero',
         reports: 'Reportes',
         users: 'Gestión de Usuarios',
         institution: 'Configuración Institucional'
@@ -941,6 +967,23 @@ async function initializePage(pageName) {
             case 'reports':
                 if (typeof initReports === 'function') {
                     await initReports();
+                }
+                break;
+            case 'financial-dashboard':
+                if (typeof initFinancialDashboard === 'function') {
+                    await initFinancialDashboard();
+                } else {
+                    console.error('Financial Dashboard module not loaded');
+                    document.getElementById('contentArea').innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
+                            <h3 class="mt-3">Dashboard Financiero no disponible</h3>
+                            <p class="text-muted">El módulo de dashboard financiero no se ha cargado correctamente.</p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
+                        </div>
+                    `;
                 }
                 break;
             case 'institution':

@@ -128,31 +128,34 @@ if (isProduction) {
 // Apply rate limiting to API routes
 app.use('/api/', limiter);
 
-// Health check endpoint - Mejorado con verificación de DB
-app.get('/health', async (req, res) => {
-  try {
-    // Test database connection
-    await prisma.$queryRaw`SELECT 1`;
+// Health check endpoint - Simple y rápido
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    service: 'School Management API',
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development',
+    uptime: process.uptime()
+  });
+});
 
+// Database health check - Separado
+app.get('/health/db', async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
     res.json({
       status: 'OK',
-      timestamp: new Date().toISOString(),
-      service: 'School Management API',
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
       database: 'connected',
-      uptime: process.uptime()
+      timestamp: new Date().toISOString()
     });
   } catch (error) {
-    console.error('Health check failed:', error);
+    console.error('Database health check failed:', error);
     res.status(503).json({
       status: 'ERROR',
-      timestamp: new Date().toISOString(),
-      service: 'School Management API',
-      version: '1.0.0',
-      environment: process.env.NODE_ENV || 'development',
       database: 'disconnected',
-      error: 'Database connection failed'
+      error: error.message,
+      timestamp: new Date().toISOString()
     });
   }
 });

@@ -163,6 +163,57 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
+// Seed endpoint - Temporal para inicializar DB
+app.get('/seed', async (req, res) => {
+  try {
+    console.log('🌱 Ejecutando seed desde endpoint...');
+    
+    // Ejecutar el script de seed
+    const { spawn } = require('child_process');
+    
+    const seedProcess = spawn('node', ['scripts/railway-production-seed.js'], {
+      env: process.env
+    });
+    
+    let output = '';
+    let errorOutput = '';
+    
+    seedProcess.stdout.on('data', (data) => {
+      output += data.toString();
+      console.log(data.toString());
+    });
+    
+    seedProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+      console.error(data.toString());
+    });
+    
+    seedProcess.on('close', (code) => {
+      if (code === 0) {
+        res.json({
+          success: true,
+          message: 'Seed ejecutado correctamente',
+          output: output
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          message: 'Error ejecutando seed',
+          error: errorOutput,
+          code: code
+        });
+      }
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Error iniciando seed',
+      error: error.message
+    });
+  }
+});
+
 // Debug endpoint - Temporal para diagnosticar
 app.get('/debug', async (req, res) => {
   try {

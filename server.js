@@ -157,6 +157,54 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// Debug endpoint - Temporal para diagnosticar
+app.get('/debug', async (req, res) => {
+  try {
+    const debug = {
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      port: process.env.PORT,
+      databaseUrl: process.env.DATABASE_URL ? 'SET (length: ' + process.env.DATABASE_URL.length + ')' : 'NOT SET',
+      nodeVersion: process.version,
+      platform: process.platform,
+      uptime: process.uptime()
+    };
+
+    if (process.env.DATABASE_URL) {
+      try {
+        const url = new URL(process.env.DATABASE_URL);
+        debug.dbHost = url.hostname;
+        debug.dbPort = url.port;
+        debug.dbName = url.pathname.substring(1);
+        debug.dbUser = url.username;
+      } catch (error) {
+        debug.dbUrlError = error.message;
+      }
+    }
+
+    // Test connection
+    try {
+      await prisma.$connect();
+      debug.connectionTest = 'SUCCESS';
+      await prisma.$disconnect();
+    } catch (error) {
+      debug.connectionTest = 'FAILED';
+      debug.connectionError = {
+        name: error.constructor.name,
+        code: error.code,
+        message: error.message
+      };
+    }
+
+    res.json(debug);
+  } catch (error) {
+    res.status(500).json({
+      error: 'Debug failed',
+      message: error.message
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/password', passwordResetRoutes);

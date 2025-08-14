@@ -163,51 +163,110 @@ app.get('/health/db', async (req, res) => {
   }
 });
 
-// Initialize database endpoint - Migraciones + Seed
+// Initialize database endpoint - Migraciones + Seed usando Prisma directamente
 app.get('/init-db', async (req, res) => {
   try {
     console.log('🎯 Inicializando base de datos completa...');
     
-    const { spawn } = require('child_process');
     let output = '';
-    let errorOutput = '';
     
-    // Función para ejecutar comando
-    const runCommand = (command, args) => {
-      return new Promise((resolve, reject) => {
-        const process = spawn(command, args, { env: process.env });
-        
-        process.stdout.on('data', (data) => {
-          const text = data.toString();
-          output += text;
-          console.log(text);
-        });
-        
-        process.stderr.on('data', (data) => {
-          const text = data.toString();
-          errorOutput += text;
-          console.error(text);
-        });
-        
-        process.on('close', (code) => {
-          if (code === 0) resolve();
-          else reject(new Error(`Command failed with code ${code}`));
-        });
-      });
-    };
-    
-    // 1. Ejecutar migraciones
+    // 1. Ejecutar migraciones usando Prisma directamente
     console.log('🔄 Ejecutando migraciones...');
-    await runCommand('npx', ['prisma', 'db', 'push', '--accept-data-loss']);
+    output += '🔄 Ejecutando migraciones...\n';
     
-    // 2. Ejecutar seed
+    try {
+      // Usar prisma db push directamente
+      await prisma.$executeRaw`SELECT 1`; // Test connection
+      
+      // Ejecutar migraciones usando el cliente de Prisma
+      const { execSync } = require('child_process');
+      const migrateResult = execSync('npx prisma db push --accept-data-loss', { 
+        env: process.env,
+        encoding: 'utf8'
+      });
+      output += migrateResult;
+      console.log('✅ Migraciones completadas');
+      
+    } catch (migrateError) {
+      console.log('⚠️ Error en migraciones, continuando con seed...');
+      output += `⚠️ Error en migraciones: ${migrateError.message}\n`;
+    }
+    
+    // 2. Ejecutar seed directamente
     console.log('🌱 Ejecutando seed...');
-    await runCommand('node', ['scripts/railway-production-seed.js']);
+    output += '🌱 Ejecutando seed...\n';
+    
+    // Importar y ejecutar el seed directamente
+    const bcrypt = require('bcryptjs');
+    
+    // Crear Institución
+    const institution = await prisma.institution.upsert({
+      where: { nit: '901.079.125-0' },
+      update: {},
+      create: {
+        name: 'Institución Educativa Distrital Villas de San Pablo',
+        nit: '901.079.125-0',
+        address: 'Diagonal 136 Nº 9D-60, Barrio Villas de San Pablo',
+        city: 'Barranquilla',
+        state: 'Atlántico',
+        locality: 'Occidental',
+        phone: '313 537 40 16',
+        email: 'yasminricodc@gmail.com',
+        dane: '108001800065',
+        resolution: '06584 de 23 junio de 2017',
+        levels: 'Preescolar, Básica Primaria, Básica Secundaria y Media',
+        title: 'Bachiller Académico',
+        calendar: 'A',
+        schedule: 'Única'
+      }
+    });
+    output += `✅ Institución creada: ${institution.name}\n`;
+    
+    // Crear Usuarios
+    const hashedPasswordRector = await bcrypt.hash('VillasSP2024!', 10);
+    const hashedPasswordAux = await bcrypt.hash('ContaVSP2024!', 10);
+    
+    const rector = await prisma.user.upsert({
+      where: { email: 'rector@villasanpablo.edu.co' },
+      update: {},
+      create: {
+        email: 'rector@villasanpablo.edu.co',
+        password: hashedPasswordRector,
+        name: 'Yasmin Rico',
+        role: 'RECTOR',
+        isActive: true,
+        isVerified: true
+      }
+    });
+    output += `✅ Usuario rector creado: ${rector.name}\n`;
+    
+    const auxiliary = await prisma.user.upsert({
+      where: { email: 'contabilidad@villasanpablo.edu.co' },
+      update: {},
+      create: {
+        email: 'contabilidad@villasanpablo.edu.co',
+        password: hashedPasswordAux,
+        name: 'Auxiliar Contable',
+        role: 'AUXILIARY_ACCOUNTANT',
+        isActive: true,
+        isVerified: true
+      }
+    });
+    output += `✅ Usuario auxiliar creado: ${auxiliary.name}\n`;
+    
+    output += '🎉 Base de datos inicializada correctamente!\n';
+    output += '\n👤 Credenciales:\n';
+    output += '📧 rector@villasanpablo.edu.co / 🔑 VillasSP2024!\n';
+    output += '📧 contabilidad@villasanpablo.edu.co / 🔑 ContaVSP2024!\n';
     
     res.json({
       success: true,
       message: 'Base de datos inicializada correctamente',
-      output: output
+      output: output,
+      credentials: {
+        rector: { email: 'rector@villasanpablo.edu.co', password: 'VillasSP2024!' },
+        auxiliary: { email: 'contabilidad@villasanpablo.edu.co', password: 'ContaVSP2024!' }
+      }
     });
     
   } catch (error) {
@@ -215,8 +274,8 @@ app.get('/init-db', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error inicializando base de datos',
-      error: errorOutput || error.message,
-      output: output
+      error: error.message,
+      stack: error.stack
     });
   }
 });

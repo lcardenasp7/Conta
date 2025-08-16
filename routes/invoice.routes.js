@@ -294,11 +294,15 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
   }
 });
 
-// Get single invoice - MUST BE AFTER specific routes
+// Get single invoice with detailed information - MEJORADO
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
+    const invoiceId = req.params.id;
+    
+    console.log('👁️ Fetching invoice details:', invoiceId);
+    
     const invoice = await prisma.invoice.findUnique({
-      where: { id: req.params.id },
+      where: { id: invoiceId },
       include: {
         student: {
           include: {
@@ -307,11 +311,12 @@ router.get('/:id', authenticateToken, async (req, res) => {
           }
         },
         items: true,
-        user: { select: { name: true } },
+        user: { select: { name: true, email: true } },
         payments: {
           include: {
             user: { select: { name: true } }
-          }
+          },
+          orderBy: { date: 'desc' }
         }
       }
     });
@@ -320,7 +325,63 @@ router.get('/:id', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: 'Factura no encontrada' });
     }
 
-    res.json(invoice);
+    // Calcular información adicional
+    const totalPaid = invoice.payments
+      .filter(payment => payment.status === 'COMPLETED')
+      .reduce((sum, payment) => sum + payment.amount, 0);
+    
+    const pendingAmount = invoice.total - totalPaid;
+    const isOverdue = new Date(invoice.dueDate) < new Date() && invoice.status !== 'PAID';
+    const daysOverdue = isOverdue 
+      ? Math.floor((new Date() - new Date(invoice.dueDate)) / (1000 * 60 * 60 * 24))
+      : 0;
+
+    // Determinar si se puede editar
+    const canEdit = invoice.status === 'PENDING' && totalPaid === 0;
+    
+    // Determinar si se puede cancelar
+    const canCancel = invoice.status === 'PENDING' && totalPaid === 0;
+    
+    // Determinar si se puede eliminar
+    const canDelete = invoice.status === 'PENDING' && invoice.payments.length === 0;
+
+    const enrichedInvoice = {
+      ...invoice,
+      totalPaid,
+      pendingAmount,
+      isOverdue,
+      daysOverdue,
+      permissions: {
+        canEdit,
+        canCancel,
+        canDelete,
+        canDownloadPDF: true
+      },
+      paymentHistory: invoice.payments.map(payment => ({
+        ...payment,
+        formattedDate: new Date(payment.date).toLocaleDateString('es-CO'),
+        formattedAmount: payment.amount.toLocaleString('es-CO')
+      })),
+      formattedDates: {
+        date: new Date(invoice.date).toLocaleDateString('es-CO'),
+        dueDate: new Date(invoice.dueDate).toLocaleDateString('es-CO'),
+        createdAt: new Date(invoice.createdAt).toLocaleDateString('es-CO')
+      },
+      formattedAmounts: {
+        subtotal: invoice.subtotal.toLocaleString('es-CO'),
+        tax: invoice.tax.toLocaleString('es-CO'),
+        total: invoice.total.toLocaleString('es-CO'),
+        totalPaid: totalPaid.toLocaleString('es-CO'),
+        pendingAmount: pendingAmount.toLocaleString('es-CO')
+      }
+    };
+
+    console.log('✅ Invoice details fetched successfully');
+    res.json({
+      success: true,
+      invoice: enrichedInvoice
+    });
+
   } catch (error) {
     console.error('Invoice fetch error:', error);
     res.status(500).json({ error: 'Error al obtener factura' });
@@ -470,32 +531,207 @@ router.get('/templates', authenticateToken, async (req, res) => {
   }
 });
 
-// Update invoice
+// Update invoice - MEJORADO CON MEJOR MANEJO DE ERRORES
 router.put('/:id', authenticateToken, canManageAccounting, async (req, res) => {
   try {
-    const { items, ...invoiceData } = req.body;
+    const invoiceId = req.params.id;
+    const { items, dueDate, concept, observations } = req.body;
     
-    // Calculate totals if items are provided - Educational services are exempt from VAT
-    let updateData = { ...invoiceData };
+    console.log('📝 Updating invoice:', invoiceId);
+    console.log('📋 Request data:', { items: items?.length, dueDate, concept, observations });
     
-    if (items) {
-      const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-      const tax = 0; // Educational services are exempt from VAT
-      const total = subtotal; // Total equals subtotal for educational services
-      
-      updateData = {
-        ...updateData,
-        subtotal,
-        tax,
-        total
-      };
+    // Validar datos de entrada
+    if (!invoiceId) {
+      return res.status(400).json({ error: 'ID de factura requerido' });
     }
 
-    const invoice = await prisma.invoice.update({
-      where: { id: req.params.id },
-      data: updateData,
+    // Verificar que la factura existe
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { payments: true }
+    });
+
+    if (!existingInvoice) {
+      console.log('❌ Invoice not found:', invoiceId);
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    console.log('📄 Existing invoice status:', existingInvoice.status);
+
+    // Verificar que la factura se puede editar
+    if (existingInvoice.status === 'PAID') {
+      return res.status(400).json({ 
+        error: 'No se puede editar una factura que ya está pagada' 
+      });
+    }
+
+    if (existingInvoice.status === 'CANCELLED') {
+      return res.status(400).json({ 
+        error: 'No se puede editar una factura cancelada' 
+      });
+    }
+
+    // Si tiene pagos parciales, solo permitir ciertos cambios
+    const hasPayments = existingInvoice.payments.length > 0;
+    console.log('💰 Has payments:', hasPayments);
+    
+    if (hasPayments && items) {
+      return res.status(400).json({ 
+        error: 'No se pueden modificar los items de una factura con pagos asociados' 
+      });
+    }
+
+    // Preparar datos de actualización
+    let updateData = {};
+    
+    if (dueDate) {
+      updateData.dueDate = new Date(dueDate);
+    }
+    
+    if (concept) {
+      updateData.concept = concept;
+    }
+    
+    if (observations !== undefined) {
+      updateData.observations = observations;
+    }
+
+    // Calculate totals if items are provided
+    if (items && !hasPayments) {
+      console.log('🧮 Calculating totals for items:', items);
+      
+      // Validar items
+      for (const item of items) {
+        if (!item.description || !item.quantity || !item.unitPrice) {
+          return res.status(400).json({ 
+            error: 'Todos los items deben tener descripción, cantidad y precio unitario' 
+          });
+        }
+        
+        if (item.quantity <= 0 || item.unitPrice < 0) {
+          return res.status(400).json({ 
+            error: 'La cantidad debe ser mayor a 0 y el precio no puede ser negativo' 
+          });
+        }
+      }
+      
+      const subtotal = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+      const tax = 0; // Educational services are exempt from VAT
+      const total = subtotal;
+      
+      updateData.subtotal = subtotal;
+      updateData.tax = tax;
+      updateData.total = total;
+      
+      console.log('💰 Calculated totals:', { subtotal, tax, total });
+    }
+
+    console.log('📝 Update data:', updateData);
+
+    // Usar transacción para actualizar
+    const updatedInvoice = await prisma.$transaction(async (tx) => {
+      console.log('🔄 Starting transaction...');
+      
+      // Actualizar factura
+      const invoice = await tx.invoice.update({
+        where: { id: invoiceId },
+        data: updateData
+      });
+
+      console.log('✅ Invoice updated in database');
+
+      // Update items if provided and no payments exist
+      if (items && !hasPayments) {
+        console.log('🗑️ Deleting existing items...');
+        
+        // Delete existing items
+        await tx.invoiceItem.deleteMany({
+          where: { invoiceId: invoiceId }
+        });
+        
+        console.log('➕ Creating new items...');
+        
+        // Create new items
+        const itemsData = items.map(item => ({
+          invoiceId: invoiceId,
+          description: item.description,
+          quantity: parseInt(item.quantity),
+          unitPrice: parseFloat(item.unitPrice),
+          total: parseInt(item.quantity) * parseFloat(item.unitPrice)
+        }));
+        
+        await tx.invoiceItem.createMany({
+          data: itemsData
+        });
+
+        console.log('✅ Items updated successfully');
+      }
+
+      // Reload invoice with all relations
+      const finalInvoice = await tx.invoice.findUnique({
+        where: { id: invoiceId },
+        include: { 
+          items: true,
+          student: {
+            include: {
+              grade: { select: { name: true } },
+              group: { select: { name: true } }
+            }
+          },
+          user: { select: { name: true } },
+          payments: {
+            include: {
+              user: { select: { name: true } }
+            }
+          }
+        }
+      });
+
+      console.log('✅ Final invoice loaded with relations');
+      return finalInvoice;
+    });
+
+    console.log('✅ Transaction completed successfully');
+    
+    res.json({
+      success: true,
+      message: 'Factura actualizada exitosamente',
+      invoice: updatedInvoice
+    });
+
+  } catch (error) {
+    console.error('❌ Invoice update error:', error);
+    console.error('❌ Error stack:', error.stack);
+    
+    // Manejo específico de errores
+    if (error.code === 'P2002') {
+      return res.status(400).json({ error: 'Error de duplicación de datos' });
+    }
+    
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'Registro no encontrado' });
+    }
+    
+    res.status(500).json({ 
+      error: 'Error al actualizar factura',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Cancel invoice - NUEVA FUNCIONALIDAD
+router.patch('/:id/cancel', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const invoiceId = req.params.id;
+    const { reason } = req.body;
+    
+    console.log('❌ Cancelling invoice:', invoiceId);
+    
+    // Verificar que la factura existe
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
       include: { 
-        items: true,
+        payments: { where: { status: 'COMPLETED' } },
         student: {
           select: {
             firstName: true,
@@ -506,49 +742,128 @@ router.put('/:id', authenticateToken, canManageAccounting, async (req, res) => {
       }
     });
 
-    // Update items if provided
-    if (items) {
-      // Delete existing items
-      await prisma.invoiceItem.deleteMany({
-        where: { invoiceId: req.params.id }
-      });
-      
-      // Create new items
-      await prisma.invoiceItem.createMany({
-        data: items.map(item => ({
-          ...item,
-          invoiceId: req.params.id,
-          total: item.quantity * item.unitPrice
-        }))
+    if (!existingInvoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Verificar que la factura se puede cancelar
+    if (existingInvoice.status === 'CANCELLED') {
+      return res.status(400).json({ 
+        error: 'La factura ya está cancelada' 
       });
     }
 
-    res.json(invoice);
+    if (existingInvoice.status === 'PAID') {
+      return res.status(400).json({ 
+        error: 'No se puede cancelar una factura que ya está pagada completamente' 
+      });
+    }
+
+    // Verificar si tiene pagos parciales
+    const totalPaid = existingInvoice.payments.reduce((sum, payment) => sum + payment.amount, 0);
+    if (totalPaid > 0) {
+      return res.status(400).json({ 
+        error: 'No se puede cancelar una factura con pagos parciales. Contacte al administrador.' 
+      });
+    }
+
+    // Cancelar la factura
+    const cancelledInvoice = await prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: 'CANCELLED',
+        observations: existingInvoice.observations 
+          ? `${existingInvoice.observations} | CANCELADA: ${reason || 'Sin motivo especificado'}`
+          : `CANCELADA: ${reason || 'Sin motivo especificado'}`
+      },
+      include: { 
+        items: true,
+        student: {
+          include: {
+            grade: { select: { name: true } },
+            group: { select: { name: true } }
+          }
+        },
+        user: { select: { name: true } },
+        payments: {
+          include: {
+            user: { select: { name: true } }
+          }
+        }
+      }
+    });
+
+    console.log('✅ Invoice cancelled successfully');
+    res.json({
+      success: true,
+      message: 'Factura cancelada exitosamente',
+      invoice: cancelledInvoice
+    });
+
   } catch (error) {
-    console.error('Invoice update error:', error);
-    res.status(500).json({ error: 'Error al actualizar factura' });
+    console.error('Invoice cancellation error:', error);
+    res.status(500).json({ error: 'Error al cancelar factura' });
   }
 });
 
-// Delete invoice
+// Delete invoice - MEJORADO CON MÁS VALIDACIONES
 router.delete('/:id', authenticateToken, canManageAccounting, async (req, res) => {
   try {
-    // Check if invoice has payments
-    const paymentsCount = await prisma.payment.count({
-      where: { invoiceId: req.params.id }
+    const invoiceId = req.params.id;
+    
+    console.log('🗑️ Deleting invoice:', invoiceId);
+    
+    // Verificar que la factura existe
+    const existingInvoice = await prisma.invoice.findUnique({
+      where: { id: invoiceId },
+      include: { 
+        payments: true,
+        student: {
+          select: {
+            firstName: true,
+            lastName: true
+          }
+        }
+      }
     });
 
-    if (paymentsCount > 0) {
+    if (!existingInvoice) {
+      return res.status(404).json({ error: 'Factura no encontrada' });
+    }
+
+    // Check if invoice has payments
+    if (existingInvoice.payments.length > 0) {
       return res.status(400).json({ 
-        error: 'No se puede eliminar una factura que tiene pagos asociados' 
+        error: 'No se puede eliminar una factura que tiene pagos asociados. Use la opción de cancelar en su lugar.' 
       });
     }
 
-    await prisma.invoice.delete({
-      where: { id: req.params.id }
+    // Solo permitir eliminar facturas PENDING sin pagos
+    if (existingInvoice.status !== 'PENDING') {
+      return res.status(400).json({ 
+        error: 'Solo se pueden eliminar facturas en estado PENDIENTE sin pagos asociados' 
+      });
+    }
+
+    // Eliminar en transacción
+    await prisma.$transaction(async (tx) => {
+      // Eliminar items primero
+      await tx.invoiceItem.deleteMany({
+        where: { invoiceId: invoiceId }
+      });
+      
+      // Eliminar factura
+      await tx.invoice.delete({
+        where: { id: invoiceId }
+      });
     });
 
-    res.json({ message: 'Factura eliminada exitosamente' });
+    console.log('✅ Invoice deleted successfully');
+    res.json({ 
+      success: true,
+      message: 'Factura eliminada exitosamente' 
+    });
+
   } catch (error) {
     console.error('Invoice deletion error:', error);
     res.status(500).json({ error: 'Error al eliminar factura' });

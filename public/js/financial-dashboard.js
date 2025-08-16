@@ -165,6 +165,37 @@ function setupFinancialDashboardEventListeners() {
     } else {
         console.warn('⚠️ Elemento periodSelect no encontrado');
     }
+    
+    // Escuchar eventos de cambios financieros desde otros módulos
+    document.addEventListener('financialDataChanged', function(event) {
+        console.log('📢 Dashboard recibió evento financiero:', event.detail.type);
+        
+        // Mostrar notificación sutil
+        if (event.detail.type === 'invoice_cancelled') {
+            console.log('💰 Dashboard: Factura cancelada, actualizando...');
+            if (typeof showNotification === 'function') {
+                showNotification('Dashboard actualizado: Factura cancelada', 'info');
+            }
+        } else if (event.detail.type === 'invoice_edited') {
+            console.log('✏️ Dashboard: Factura editada, actualizando...');
+            if (typeof showNotification === 'function') {
+                showNotification('Dashboard actualizado: Factura editada', 'info');
+            }
+        } else if (event.detail.type === 'payment_created') {
+            console.log('💳 Dashboard: Pago registrado, actualizando...');
+            if (typeof showNotification === 'function') {
+                showNotification('Dashboard actualizado: Pago registrado', 'success');
+            }
+        }
+        
+        // Actualizar dashboard después de un pequeño delay
+        setTimeout(() => {
+            console.log('🔄 Actualizando dashboard por evento financiero...');
+            loadFinancialOverview();
+        }, 1500);
+    });
+    
+    console.log('👂 Dashboard configurado para escuchar eventos financieros');
 }
 
 // Cargar overview financiero

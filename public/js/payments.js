@@ -277,12 +277,22 @@ async function savePayment() {
             const result = await api.createPayment(paymentData);
             showNotification('Pago registrado exitosamente', 'success');
 
-            // Notify dashboard of new payment
-            if (typeof notifyPaymentMade === 'function') {
-                notifyPaymentMade({
+            // Notificar cambio financiero para actualizar dashboard
+            if (typeof window.notifyFinancialChange === 'function') {
+                window.notifyFinancialChange('payment_created', {
+                    paymentId: result.id,
                     amount: paymentData.amount,
-                    concept: paymentData.concept || 'OTHER'
+                    concept: paymentData.concept || 'OTHER',
+                    invoiceId: paymentData.invoiceId,
+                    timestamp: new Date()
                 });
+            }
+
+            // Actualizar dashboard financiero si está disponible
+            if (typeof window.updateFinancialDashboard === 'function') {
+                setTimeout(() => {
+                    window.updateFinancialDashboard('Pago registrado');
+                }, 500);
             }
         }
         

@@ -1,4 +1,4 @@
-// Debts Management
+// Debts Management - ARCHIVO COMPLETO CORREGIDO
 
 let currentDebts = [];
 let currentDebtsPage = 1;
@@ -173,18 +173,569 @@ async function loadDebtStats() {
     }
 }
 
-// Create payment for specific debt
-function createPaymentForDebt(invoiceId) {
-    // This would open the payment modal with the invoice pre-selected
-    // For now, show a notification
-    showNotification('Función de crear pago desde deuda en desarrollo', 'info');
+// ===================================================
+// FUNCIONES COMPLETADAS - REEMPLAZAR LAS ANTERIORES
+// ===================================================
+
+// Create payment for specific debt - FUNCIÓN CORREGIDA
+async function createPaymentForDebt(invoiceId) {
+    try {
+        showLoading();
+        console.log('🔄 Creating payment for debt, invoice ID:', invoiceId);
+        
+        // Obtener información detallada de la factura
+        const response = await api.getInvoice(invoiceId);
+        
+        // CORREGIR: Manejar la estructura de respuesta correcta
+        const invoice = response.success ? response.invoice : response;
+        
+        if (!invoice) {
+            throw new Error('Factura no encontrada');
+        }
+        
+        console.log('📄 Invoice loaded:', invoice);
+        
+        // CORREGIR: Calcular monto pendiente correctamente y redondear
+        const totalPaid = invoice.totalPaid || 0;
+        const pendingAmount = Math.round((invoice.total || 0) - totalPaid);
+        
+        console.log('💰 Amounts calculated:', {
+            total: invoice.total,
+            totalPaid: totalPaid,
+            pendingAmount: pendingAmount
+        });
+        
+        if (pendingAmount <= 0) {
+            showNotification('Esta factura ya está completamente pagada', 'warning');
+            return;
+        }
+        
+        // Crear modal de pago simplificado para deudas
+        const modalHtml = `
+            <div class="modal fade" id="debtPaymentModal" tabindex="-1" aria-labelledby="debtPaymentModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-success text-white">
+                            <h5 class="modal-title" id="debtPaymentModalLabel">
+                                <i class="bi bi-cash-coin me-2"></i>Registrar Pago de Deuda
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <!-- Información de la factura (solo lectura) -->
+                            <div class="row mb-4">
+                                <div class="col-md-6">
+                                    <div class="card border-info">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Factura</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-1"><strong>Número:</strong> ${invoice.invoiceNumber || 'N/A'}</p>
+                                            <p class="mb-1"><strong>Concepto:</strong> ${getConceptText(invoice.concept)}</p>
+                                            <p class="mb-1"><strong>Total:</strong> ${formatCurrency(invoice.total || 0)}</p>
+                                            <p class="mb-0"><strong class="text-danger">Pendiente:</strong> ${formatCurrency(pendingAmount)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card border-primary">
+                                        <div class="card-header bg-primary text-white">
+                                            <h6 class="mb-0"><i class="bi bi-person me-2"></i>Cliente</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            ${invoice.student ? `
+                                                <p class="mb-1"><strong>Estudiante:</strong> ${invoice.student.firstName} ${invoice.student.lastName}</p>
+                                                <p class="mb-1"><strong>Documento:</strong> ${invoice.student.document}</p>
+                                                <p class="mb-1"><strong>Grado:</strong> ${invoice.student.grade?.name || 'N/A'}</p>
+                                                <p class="mb-0"><strong>Grupo:</strong> ${invoice.student.group?.name || 'N/A'}</p>
+                                            ` : `
+                                                <p class="mb-1"><strong>Cliente:</strong> ${invoice.clientName || 'Cliente externo'}</p>
+                                                <p class="mb-1"><strong>Documento:</strong> ${invoice.clientDocument || 'N/A'}</p>
+                                                <p class="mb-0"><strong>Tipo:</strong> Factura externa</p>
+                                            `}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Formulario de pago -->
+                            <form id="debtPaymentForm">
+                                <input type="hidden" id="debtInvoiceId" value="${invoice.id}">
+                                <input type="hidden" id="debtStudentId" value="${invoice.studentId || ''}">
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="debtPaymentAmount" class="form-label">
+                                                <i class="bi bi-currency-dollar me-1"></i>Monto del Pago *
+                                            </label>
+                                            <input type="number" class="form-control" id="debtPaymentAmount" 
+                                                   value="${pendingAmount}" max="${pendingAmount}" min="0.01" step="0.01" required>
+                                            <div class="form-text">Máximo: ${formatCurrency(pendingAmount)}</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="debtPaymentMethod" class="form-label">
+                                                <i class="bi bi-credit-card me-1"></i>Método de Pago *
+                                            </label>
+                                            <select class="form-select" id="debtPaymentMethod" required>
+                                                <option value="">Seleccionar método</option>
+                                                <option value="CASH">Efectivo</option>
+                                                <option value="BANK_TRANSFER">Transferencia Bancaria</option>
+                                                <option value="CARD">Tarjeta</option>
+                                                <option value="CHECK">Cheque</option>
+                                                <option value="OTHER">Otro</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="debtPaymentReference" class="form-label">
+                                                <i class="bi bi-hash me-1"></i>Referencia
+                                            </label>
+                                            <input type="text" class="form-control" id="debtPaymentReference" 
+                                                   placeholder="Número de transacción, cheque, etc.">
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="mb-3">
+                                            <label for="debtPaymentDate" class="form-label">
+                                                <i class="bi bi-calendar me-1"></i>Fecha del Pago
+                                            </label>
+                                            <input type="date" class="form-control" id="debtPaymentDate" 
+                                                   value="${new Date().toISOString().split('T')[0]}">
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="debtPaymentObservations" class="form-label">
+                                        <i class="bi bi-chat-text me-1"></i>Observaciones
+                                    </label>
+                                    <textarea class="form-control" id="debtPaymentObservations" rows="3" 
+                                             placeholder="Observaciones adicionales del pago..."></textarea>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="bi bi-x-circle me-1"></i>Cancelar
+                            </button>
+                            <button type="button" class="btn btn-success" onclick="saveDebtPayment()">
+                                <i class="bi bi-check-circle me-1"></i>Registrar Pago
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remover modal existente si existe
+        const existingModal = document.getElementById('debtPaymentModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Agregar modal al DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('debtPaymentModal'));
+        modal.show();
+        
+        // Limpiar modal al cerrarse
+        document.getElementById('debtPaymentModal').addEventListener('hidden.bs.modal', function () {
+            this.remove();
+        });
+        
+    } catch (error) {
+        console.error('❌ Error loading invoice for payment:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
 }
 
-// View invoice details
-function viewInvoice(invoiceId) {
-    // This would open the invoice modal in view mode
-    showNotification('Función de ver factura en desarrollo', 'info');
+// Guardar pago de deuda - FUNCIÓN CORREGIDA
+async function saveDebtPayment() {
+    const form = document.getElementById('debtPaymentForm');
+    if (!form) {
+        showNotification('Formulario no encontrado', 'error');
+        return;
+    }
+    
+    // Validar campos requeridos manualmente
+    const amount = document.getElementById('debtPaymentAmount').value;
+    const method = document.getElementById('debtPaymentMethod').value;
+    const invoiceId = document.getElementById('debtInvoiceId').value;
+    
+    if (!amount || !method || !invoiceId) {
+        showNotification('Por favor complete todos los campos requeridos', 'error');
+        return;
+    }
+    
+    if (parseFloat(amount) <= 0) {
+        showNotification('El monto debe ser mayor a 0', 'error');
+        return;
+    }
+    
+    // CORREGIR: Construir datos del pago correctamente con validación mejorada
+    const paymentData = {
+        invoiceId: invoiceId, // Asegurar que no sea "undefined"
+        amount: Math.round(parseFloat(amount) * 100) / 100, // Redondear a 2 decimales
+        method: method,
+        reference: document.getElementById('debtPaymentReference').value?.trim() || null,
+        observations: document.getElementById('debtPaymentObservations').value?.trim() || null
+    };
+    
+    // CORREGIR: Solo agregar studentId si existe y no está vacío
+    const studentId = document.getElementById('debtStudentId').value;
+    if (studentId && studentId !== '' && studentId !== 'undefined' && studentId !== 'null') {
+        paymentData.studentId = studentId;
+    }
+    
+    // Validación adicional del monto
+    if (paymentData.amount <= 0 || isNaN(paymentData.amount)) {
+        showNotification('Monto inválido', 'error');
+        return;
+    }
+    
+    // Validación del invoiceId
+    if (!paymentData.invoiceId || paymentData.invoiceId === 'undefined') {
+        showNotification('ID de factura inválido', 'error');
+        return;
+    }
+    
+    try {
+        showLoading();
+        console.log('💰 Saving debt payment:', paymentData);
+        console.log('🔍 Debugging payment data:');
+        console.log('- Invoice ID:', paymentData.invoiceId, typeof paymentData.invoiceId);
+        console.log('- Student ID:', paymentData.studentId, typeof paymentData.studentId);
+        console.log('- Amount:', paymentData.amount, typeof paymentData.amount);
+        console.log('- Method:', paymentData.method, typeof paymentData.method);
+        
+        // Crear el pago con manejo de errores mejorado
+        const result = await api.createPayment(paymentData);
+        
+        console.log('✅ Payment created successfully:', result);
+        
+        // Cerrar modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('debtPaymentModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
+        // Mostrar notificación de éxito
+        showNotification('Pago registrado exitosamente', 'success');
+        
+        // Refrescar datos de deudas después de un pequeño delay
+        setTimeout(async () => {
+            await refreshDebts();
+        }, 500);
+        
+    } catch (error) {
+        console.error('❌ Error saving debt payment:', error);
+        console.error('❌ Full error details:', {
+            message: error.message,
+            stack: error.stack,
+            paymentData: paymentData
+        });
+        
+        // Manejo específico de errores
+        let errorMessage = 'Error al crear pago';
+        
+        if (error.message.includes('validación')) {
+            errorMessage = 'Error de validación: ' + error.message;
+        } else if (error.message.includes('500')) {
+            errorMessage = 'Error interno del servidor. Verifique los datos e intente nuevamente.';
+        } else if (error.message.includes('400')) {
+            errorMessage = 'Datos del pago inválidos. Verifique la información.';
+        }
+        
+        showNotification(errorMessage, 'error');
+        
+        // No cerrar el modal para que el usuario pueda corregir
+        
+    } finally {
+        hideLoading();
+    }
 }
+
+// View invoice details - FUNCIÓN COMPLETADA
+async function viewInvoice(invoiceId) {
+    try {
+        showLoading();
+        console.log('👁️ Viewing invoice:', invoiceId);
+        
+        // Obtener información detallada de la factura
+        const invoice = await api.getInvoice(invoiceId);
+        
+        if (!invoice) {
+            throw new Error('Factura no encontrada');
+        }
+        
+        console.log('📄 Invoice loaded for viewing:', invoice);
+        
+        // Calcular información adicional
+        const totalPaid = invoice.totalPaid || 0;
+        const pendingAmount = invoice.total - totalPaid;
+        const isOverdue = new Date(invoice.dueDate) < new Date() && invoice.status !== 'PAID';
+        
+        // Crear y mostrar modal de visualización
+        const modalHtml = `
+            <div class="modal fade" id="invoiceViewModal" tabindex="-1" aria-labelledby="invoiceViewModalLabel" aria-hidden="true">
+                <div class="modal-dialog modal-xl">
+                    <div class="modal-content">
+                        <div class="modal-header bg-primary text-white">
+                            <h5 class="modal-title" id="invoiceViewModalLabel">
+                                <i class="bi bi-receipt me-2"></i>Factura ${invoice.invoiceNumber}
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <!-- Estado de la factura -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="alert ${isOverdue ? 'alert-danger' : pendingAmount > 0 ? 'alert-warning' : 'alert-success'} mb-3">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <strong><i class="bi bi-info-circle me-1"></i>Estado: ${getStatusText(invoice.status)}</strong>
+                                                ${isOverdue ? '<span class="badge bg-danger ms-2">VENCIDA</span>' : ''}
+                                            </div>
+                                            <div>
+                                                ${pendingAmount > 0 ? `<strong class="text-danger">Pendiente: ${formatCurrency(pendingAmount)}</strong>` : '<strong class="text-success">PAGADA COMPLETAMENTE</strong>'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Información general -->
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <div class="card border-info">
+                                        <div class="card-header bg-info text-white">
+                                            <h6 class="mb-0"><i class="bi bi-receipt me-2"></i>Información de Factura</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2"><strong>Número:</strong> ${invoice.invoiceNumber}</p>
+                                            <p class="mb-2"><strong>Fecha:</strong> ${formatDate(invoice.date)}</p>
+                                            <p class="mb-2"><strong>Vencimiento:</strong> ${formatDate(invoice.dueDate)}</p>
+                                            <p class="mb-0"><strong>Concepto:</strong> ${getConceptText(invoice.concept)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-4">
+                                    <div class="card border-success">
+                                        <div class="card-header bg-success text-white">
+                                            <h6 class="mb-0"><i class="bi bi-person me-2"></i>Estudiante</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2"><strong>Nombre:</strong> ${invoice.student?.firstName} ${invoice.student?.lastName}</p>
+                                            <p class="mb-2"><strong>Documento:</strong> ${invoice.student?.document}</p>
+                                            <p class="mb-2"><strong>Grado:</strong> ${invoice.student?.grade?.name || 'N/A'}</p>
+                                            <p class="mb-0"><strong>Grupo:</strong> ${invoice.student?.group?.name || 'N/A'}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-md-4">
+                                    <div class="card border-warning">
+                                        <div class="card-header bg-warning text-dark">
+                                            <h6 class="mb-0"><i class="bi bi-currency-dollar me-2"></i>Resumen Financiero</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            <p class="mb-2"><strong>Subtotal:</strong> ${formatCurrency(invoice.subtotal)}</p>
+                                            <p class="mb-2"><strong>IVA:</strong> ${formatCurrency(invoice.tax || 0)}</p>
+                                            <p class="mb-2"><strong>Total:</strong> ${formatCurrency(invoice.total)}</p>
+                                            <p class="mb-2"><strong>Pagado:</strong> ${formatCurrency(totalPaid)}</p>
+                                            <p class="mb-0"><strong class="${pendingAmount > 0 ? 'text-danger' : 'text-success'}">Pendiente:</strong> ${formatCurrency(pendingAmount)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Items de la factura -->
+                            <div class="row mb-4">
+                                <div class="col-12">
+                                    <div class="card">
+                                        <div class="card-header bg-dark text-white">
+                                            <h6 class="mb-0"><i class="bi bi-list-ul me-2"></i>Detalle de Items</h6>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <div class="table-responsive">
+                                                <table class="table table-striped mb-0">
+                                                    <thead class="table-dark">
+                                                        <tr>
+                                                            <th>Descripción</th>
+                                                            <th class="text-center">Cantidad</th>
+                                                            <th class="text-end">Precio Unit.</th>
+                                                            <th class="text-end">Total</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        ${invoice.items?.map(item => `
+                                                            <tr>
+                                                                <td>${item.description}</td>
+                                                                <td class="text-center">${item.quantity}</td>
+                                                                <td class="text-end">${formatCurrency(item.unitPrice)}</td>
+                                                                <td class="text-end">${formatCurrency(item.total)}</td>
+                                                            </tr>
+                                                        `).join('') || '<tr><td colspan="4" class="text-center">No hay items</td></tr>'}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Historial de pagos -->
+                            ${invoice.payments && invoice.payments.length > 0 ? `
+                                <div class="row mb-4">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header bg-success text-white">
+                                                <h6 class="mb-0"><i class="bi bi-clock-history me-2"></i>Historial de Pagos</h6>
+                                            </div>
+                                            <div class="card-body p-0">
+                                                <div class="table-responsive">
+                                                    <table class="table table-striped mb-0">
+                                                        <thead class="table-success">
+                                                            <tr>
+                                                                <th>Fecha</th>
+                                                                <th>Monto</th>
+                                                                <th>Método</th>
+                                                                <th>Referencia</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            ${invoice.payments.map(payment => `
+                                                                <tr>
+                                                                    <td>${formatDate(payment.date)}</td>
+                                                                    <td>${formatCurrency(payment.amount)}</td>
+                                                                    <td>${getPaymentMethodText(payment.method)}</td>
+                                                                    <td>${payment.reference || 'N/A'}</td>
+                                                                </tr>
+                                                            `).join('')}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                            
+                            <!-- Observaciones -->
+                            ${invoice.observations ? `
+                                <div class="row">
+                                    <div class="col-12">
+                                        <div class="card">
+                                            <div class="card-header bg-secondary text-white">
+                                                <h6 class="mb-0"><i class="bi bi-chat-text me-2"></i>Observaciones</h6>
+                                            </div>
+                                            <div class="card-body">
+                                                <p class="mb-0">${invoice.observations}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="modal-footer">
+                            <div class="btn-group me-auto">
+                                ${pendingAmount > 0 ? `
+                                    <button type="button" class="btn btn-success" onclick="closeViewModalAndCreatePayment('${invoice.id}')">
+                                        <i class="bi bi-cash-coin me-1"></i>Registrar Pago
+                                    </button>
+                                ` : ''}
+                                ${(invoice.student?.phone || invoice.student?.guardianPhone) ? `
+                                    <button type="button" class="btn btn-primary" onclick="contactDebtor('${invoice.student?.phone || invoice.student?.guardianPhone}')">
+                                        <i class="bi bi-telephone me-1"></i>Contactar
+                                    </button>
+                                ` : ''}
+                            </div>
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="bi bi-x-circle me-1"></i>Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remover modal existente si existe
+        const existingModal = document.getElementById('invoiceViewModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Agregar modal al DOM
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('invoiceViewModal'));
+        modal.show();
+        
+        // Limpiar modal al cerrarse
+        document.getElementById('invoiceViewModal').addEventListener('hidden.bs.modal', function () {
+            this.remove();
+        });
+        
+    } catch (error) {
+        console.error('❌ Error loading invoice for view:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Función auxiliar para cerrar modal de vista y abrir modal de pago
+function closeViewModalAndCreatePayment(invoiceId) {
+    const viewModal = bootstrap.Modal.getInstance(document.getElementById('invoiceViewModal'));
+    if (viewModal) {
+        viewModal.hide();
+    }
+    
+    // Abrir modal de pago después de cerrar el de vista
+    setTimeout(() => {
+        createPaymentForDebt(invoiceId);
+    }, 300);
+}
+
+// Función auxiliar para obtener texto del estado
+function getStatusText(status) {
+    const statusMap = {
+        'PENDING': 'Pendiente',
+        'PARTIAL': 'Pago Parcial',
+        'PAID': 'Pagada',
+        'CANCELLED': 'Cancelada'
+    };
+    return statusMap[status] || status;
+}
+
+// Función auxiliar para obtener texto del método de pago
+function getPaymentMethodText(method) {
+    const methodMap = {
+        'CASH': 'Efectivo',
+        'BANK_TRANSFER': 'Transferencia',
+        'CARD': 'Tarjeta',
+        'CHECK': 'Cheque',
+        'OTHER': 'Otro'
+    };
+    return methodMap[method] || method;
+}
+
+// ===================================================
+// RESTO DE FUNCIONES ORIGINALES (SIN CAMBIOS)
+// ===================================================
 
 // Contact debtor
 function contactDebtor(phone) {

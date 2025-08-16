@@ -6,9 +6,9 @@ const { authenticateToken, canManageAccounting } = require('../middleware/auth.m
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Validation rules
+// Validation rules - CORREGIDAS para facturas externas
 const validatePayment = [
-  body('studentId').isUUID().withMessage('ID de estudiante inválido'),
+  body('studentId').optional().isUUID().withMessage('ID de estudiante inválido'),
   body('amount').isFloat({ min: 0.01 }).withMessage('Monto debe ser mayor a 0'),
   body('method').isIn(['CASH', 'BANK_TRANSFER', 'CARD', 'CHECK', 'OTHER']).withMessage('Método de pago inválido'),
   body('invoiceId').optional().isUUID().withMessage('ID de factura inválido'),
@@ -142,7 +142,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Create payment
+// Create payment - FUNCIÓN CORREGIDA
 router.post('/', authenticateToken, canManageAccounting, validatePayment, async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -152,19 +152,64 @@ router.post('/', authenticateToken, canManageAccounting, validatePayment, async 
 
     const { invoiceId, eventId, ...paymentData } = req.body;
 
-    // Generate payment number
-    const lastPayment = await prisma.payment.findFirst({
-      orderBy: { paymentNumber: 'desc' }
-    });
+    // CORREGIR: Generar número de pago único de forma robusta
+    const currentYear = new Date().getFullYear();
     
-    const nextNumber = lastPayment 
-      ? parseInt(lastPayment.paymentNumber.split('-')[2]) + 1 
-      : 1;
-    
-    const paymentNumber = `PAG-${new Date().getFullYear()}-${nextNumber.toString().padStart(6, '0')}`;
+    // Función para generar número único
+    const generateUniquePaymentNumber = async (tx, retries = 5) => {
+      for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+          // Obtener el último número del año actual
+          const lastPayment = await tx.payment.findFirst({
+            where: {
+              paymentNumber: {
+                startsWith: `PAG-${currentYear}-`
+              }
+            },
+            orderBy: { paymentNumber: 'desc' }
+          });
+
+          let nextNumber = 1;
+          if (lastPayment) {
+            const parts = lastPayment.paymentNumber.split('-');
+            if (parts.length === 3) {
+              nextNumber = parseInt(parts[2]) + 1;
+            }
+          }
+
+          const paymentNumber = `PAG-${currentYear}-${nextNumber.toString().padStart(6, '0')}`;
+
+          // Verificar que no existe (doble verificación)
+          const existing = await tx.payment.findUnique({
+            where: { paymentNumber }
+          });
+
+          if (!existing) {
+            return paymentNumber;
+          }
+
+          // Si existe, incrementar y reintentar
+          nextNumber++;
+        } catch (error) {
+          if (attempt === retries - 1) {
+            throw new Error('No se pudo generar un número de pago único: ' + error.message);
+          }
+          
+          // Esperar un tiempo aleatorio antes del siguiente intento
+          await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
+        }
+      }
+      
+      throw new Error('No se pudo generar un número de pago único después de varios intentos');
+    };
 
     // Start transaction
     const result = await prisma.$transaction(async (tx) => {
+      // Generar número de pago único
+      const paymentNumber = await generateUniquePaymentNumber(tx);
+      
+      console.log('🔢 Generated payment number:', paymentNumber);
+
       // Create payment
       const payment = await tx.payment.create({
         data: {
@@ -197,7 +242,11 @@ router.post('/', authenticateToken, canManageAccounting, validatePayment, async 
       if (invoiceId) {
         const invoice = await tx.invoice.findUnique({
           where: { id: invoiceId },
-          include: { payments: true }
+          include: { 
+            payments: { 
+              where: { status: 'COMPLETED' }
+            } 
+          }
         });
 
         if (invoice) {
@@ -214,6 +263,8 @@ router.post('/', authenticateToken, canManageAccounting, validatePayment, async 
             where: { id: invoiceId },
             data: { status: newStatus }
           });
+
+          console.log('✅ Invoice status updated:', { invoiceId, newStatus, totalPaid, invoiceTotal: invoice.total });
         }
       }
 

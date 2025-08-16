@@ -394,4 +394,121 @@ router.get('/stats/summary', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete payment
+router.delete('/:id', authenticateToken, canManageAccounting, async (req, res) => {
+  try {
+    const paymentId = req.params.id;
+
+    // Get payment details before deletion
+    const payment = await prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        invoice: true,
+        event: true
+      }
+    });
+
+    if (!payment) {
+      return res.status(404).json({ error: 'Pago no encontrado' });
+    }
+
+    // Use transaction to ensure data consistency
+    const result = await prisma.$transaction(async (tx) => {
+      // Delete the payment
+      await tx.payment.delete({
+        where: { id: paymentId }
+      });
+
+      // Update invoice status if payment was linked to an invoice
+      if (payment.invoiceId) {
+        const invoice = await tx.invoice.findUnique({
+          where: { id: payment.invoiceId },
+          include: { payments: true }
+        });
+
+        if (invoice) {
+          const remainingPayments = invoice.payments.filter(p => p.id !== paymentId);
+          const totalPaid = remainingPayments.reduce((sum, p) => sum + p.amount, 0);
+          
+          let newStatus = 'PENDING';
+          if (totalPaid >= invoice.total) {
+            newStatus = 'PAID';
+          } else if (totalPaid > 0) {
+            newStatus = 'PARTIAL';
+          }
+
+          await tx.invoice.update({
+            where: { id: payment.invoiceId },
+            data: { status: newStatus }
+          });
+        }
+      }
+
+      // Update event assignment if payment was for an event
+      if (payment.eventId) {
+        const assignment = await tx.eventAssignment.findUnique({
+          where: {
+            eventId_studentId: {
+              eventId: payment.eventId,
+              studentId: payment.studentId
+            }
+          }
+        });
+
+        if (assignment) {
+          const event = await tx.event.findUnique({
+            where: { id: payment.eventId }
+          });
+
+          // Recalculate tickets sold and amount raised
+          const remainingPayments = await tx.payment.findMany({
+            where: {
+              eventId: payment.eventId,
+              studentId: payment.studentId,
+              id: { not: paymentId }
+            }
+          });
+
+          const newAmountRaised = remainingPayments.reduce((sum, p) => sum + p.amount, 0);
+          const newTicketsSold = event ? Math.floor(newAmountRaised / event.ticketPrice) : 0;
+
+          await tx.eventAssignment.update({
+            where: { id: assignment.id },
+            data: {
+              ticketsSold: Math.min(assignment.ticketsAssigned, newTicketsSold),
+              amountRaised: newAmountRaised
+            }
+          });
+
+          // Update event total raised
+          const allEventPayments = await tx.payment.findMany({
+            where: { 
+              eventId: payment.eventId,
+              id: { not: paymentId }
+            }
+          });
+          
+          const newEventTotal = allEventPayments.reduce((sum, p) => sum + p.amount, 0);
+          
+          await tx.event.update({
+            where: { id: payment.eventId },
+            data: { totalRaised: newEventTotal }
+          });
+        }
+      }
+
+      return payment;
+    });
+
+    res.json({ 
+      success: true, 
+      message: 'Pago eliminado exitosamente',
+      deletedPayment: result
+    });
+  } catch (error) {
+    console.error('Payment deletion error:', error);
+    res.status(500).json({ error: 'Error al eliminar pago' });
+  }
+});
+
 module.exports = router;

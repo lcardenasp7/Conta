@@ -1,6 +1,8 @@
 // API Configuration
 const API_BASE_URL = '/api';
 
+// CORREGIDO: Eliminados datos simulados - usando solo datos reales del backend
+
 // API Helper Class
 class API {
     constructor() {
@@ -154,10 +156,6 @@ class API {
 
     async deleteLogo() {
         return this.delete('/institution/logo');
-    }
-
-    async getDashboardActivities() {
-        return this.get('/dashboard/recent-activities');
     }
 
     async getMonthlyIncomeChart(year = new Date().getFullYear()) {
@@ -371,10 +369,14 @@ class API {
         return this.get('/events/dashboard/summary');
     }
 
-    // Event Assignments
+    // CORREGIDO: Event Assignments - Solo datos reales del backend
     async getEventAssignments(eventId, params = {}) {
+        console.log(`🔍 Loading assignments for event ${eventId}`);
         const queryString = new URLSearchParams(params).toString();
-        return this.get(`/events/${eventId}/assignments${queryString ? '?' + queryString : ''}`);
+        const assignments = await this.get(`/events/${eventId}/assignments${queryString ? '?' + queryString : ''}`);
+        
+        console.log(`✅ Loaded ${assignments.length} assignments from backend`);
+        return assignments;
     }
 
     async createEventAssignment(eventId, data) {
@@ -397,13 +399,47 @@ class API {
         return this.delete(`/events/${eventId}/assignments/${assignmentId}`);
     }
 
-    // Event Payments
+    // CORREGIDO: Event Payments
     async getEventPayments(eventId) {
-        return this.get(`/events/${eventId}/payments`);
+        console.log(`🔍 Getting payments for event ${eventId}`);
+        const eventPayments = await this.get(`/events/${eventId}/payments`);
+        console.log(`✅ Found ${eventPayments.length} payments for event`);
+        return eventPayments;
     }
 
     async createEventPayment(eventId, data) {
-        return this.post(`/events/${eventId}/payments`, data);
+        console.log(`💰 Creating payment for event ${eventId}:`, data);
+        const result = await this.post(`/events/${eventId}/payments`, data);
+        console.log(`✅ Payment created:`, result);
+        return result;
+    }
+
+    // CORREGIDO: Payment History - Usar endpoint existente y filtrar
+    async getPaymentHistory(eventId, studentId) {
+        console.log(`📋 Fetching payment history for event ${eventId}, student ${studentId}`);
+        const allPayments = await this.get(`/events/${eventId}/payments`);
+        const history = allPayments.filter(payment => payment.studentId === studentId);
+        console.log(`✅ Found ${history.length} payments in history for student ${studentId}`);
+        return history;
+    }
+
+    // CORREGIDO: Add Partial Payment - usar endpoint correcto
+    async addPartialPayment(eventId, studentId, data) {
+        console.log(`💳 Adding partial payment for event ${eventId}, student ${studentId}:`, data);
+        const result = await this.post(`/events/${eventId}/payments`, {
+            studentId,
+            ...data
+        });
+        console.log(`✅ Partial payment added:`, result);
+        return result;
+    }
+
+    // CORREGIDO: Delete Payment - Solo backend real
+    async deletePayment(paymentId) {
+        console.log(`🗑️ Attempting to delete payment ${paymentId}`);
+        const result = await this.delete(`/payments/${paymentId}`);
+        console.log(`✅ Payment deleted successfully:`, result);
+        return result;
     }
 
     // Get all event assignments (for reports)
@@ -437,15 +473,6 @@ class API {
     // Reports endpoints
     async getFinancialReport(startDate, endDate) {
         return this.get(`/reports/financial?startDate=${startDate}&endDate=${endDate}`);
-    }
-
-    // Institution endpoints
-    async getInstitution() {
-        return this.get('/institution');
-    }
-
-    async updateInstitution(data) {
-        return this.put('/institution', data);
     }
 
     // User endpoints

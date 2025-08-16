@@ -212,6 +212,9 @@ function loadAssignmentsTemplate() {
 
         <!-- Payment Modal -->
         ${getEventPaymentModalTemplate()}
+
+        <!-- Payment History Modal -->
+        ${getPaymentHistoryModalTemplate()}
     `;
 }
 
@@ -347,6 +350,53 @@ function getBulkAssignmentModalTemplate() {
     `;
 }
 
+function getPaymentHistoryModalTemplate() {
+    return `
+        <div class="modal fade" id="paymentHistoryModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="paymentHistoryModalTitle">Historial de Pagos del Evento</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <h6 id="paymentHistoryStudentInfo"></h6>
+                            <p id="paymentHistoryEventInfo" class="text-muted"></p>
+                        </div>
+                        <div class="d-flex justify-content-end mb-3">
+                            <button id="exportPaymentHistory" class="btn btn-sm btn-outline-success">
+                                <i class="bi bi-download"></i> Exportar a CSV
+                            </button>
+                        </div>
+                        <div class="table-responsive">
+                            <table id="paymentHistoryTable" class="table table-striped table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID Pago</th>
+                                        <th>Fecha</th>
+                                        <th>Monto Pagado</th>
+                                        <th>Método</th>
+                                        <th>Referencia</th>
+                                        <th>Observaciones</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="paymentHistoryTableBody">
+                                    <!-- History rows will be populated here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function getEventPaymentModalTemplate() {
     return `
         <div class="modal fade" id="eventPaymentModal" tabindex="-1">
@@ -443,7 +493,6 @@ function getEventPaymentModalTemplate() {
 // FUNCIONES PRINCIPALES DE ASIGNACIONES
 // ================================
 
-// Cargar eventos para el selector
 async function loadEventsForAssignments() {
     try {
         const events = await api.getEvents();
@@ -451,7 +500,6 @@ async function loadEventsForAssignments() {
 
         if (!select) return;
 
-        // Filtrar solo eventos activos o en planificación
         const availableEvents = events.filter(e =>
             e.status === 'ACTIVE' || e.status === 'PLANNING'
         );
@@ -471,7 +519,6 @@ async function loadEventsForAssignments() {
     }
 }
 
-// Seleccionar evento para asignaciones
 async function selectEventForAssignments(eventId) {
     try {
         if (!eventId) {
@@ -481,20 +528,12 @@ async function selectEventForAssignments(eventId) {
 
         console.log('🎯 Selecting event for assignments:', eventId);
 
-        // Obtener detalles del evento
         const event = await api.getEvent(eventId);
         selectedEventForAssignments = event;
 
-        // Mostrar información del evento
         updateEventInfo(event);
-
-        // Cargar asignaciones del evento
         await loadEventAssignments(eventId);
-
-        // Mostrar contenedores
         showAssignmentContainers();
-
-        // Cargar filtros
         await loadAssignmentFilters();
 
         console.log('✅ Event selected for assignments:', event.name);
@@ -504,7 +543,6 @@ async function selectEventForAssignments(eventId) {
     }
 }
 
-// Actualizar información del evento
 function updateEventInfo(event) {
     const infoContainer = document.getElementById('assignmentEventInfo');
 
@@ -527,33 +565,60 @@ function updateEventInfo(event) {
     `;
 }
 
-// Cargar asignaciones del evento
 async function loadEventAssignments(eventId) {
     try {
         console.log('📋 Loading event assignments for:', eventId);
 
+        // CORREGIDO: Mostrar indicador de carga en la tabla
+        const tbody = document.getElementById('assignmentsTableBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="11" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Cargando...</span>
+                        </div>
+                        <p class="mt-2 text-muted">Cargando asignaciones...</p>
+                    </td>
+                </tr>
+            `;
+        }
+
         const assignments = await api.getEventAssignments(eventId);
         assignmentsData = assignments;
 
-        // Actualizar estadísticas
         updateAssignmentsStats(assignments);
-
-        // Renderizar tabla
         renderAssignmentsTable(assignments);
 
         console.log('✅ Event assignments loaded:', assignments.length);
     } catch (error) {
         console.error('❌ Error loading event assignments:', error);
+
+        // CORREGIDO: Mostrar error en la tabla si no se pueden cargar las asignaciones
+        const tbody = document.getElementById('assignmentsTableBody');
+        if (tbody) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="11" class="text-center py-4 text-danger">
+                        <i class="bi bi-exclamation-circle fs-1"></i>
+                        <p class="mt-2">Error al cargar asignaciones: ${error.message}</p>
+                        <button class="btn btn-outline-primary btn-sm" onclick="loadEventAssignments('${eventId}')">
+                            <i class="bi bi-arrow-clockwise"></i> Reintentar
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }
+
         showError('Error al cargar asignaciones: ' + error.message);
     }
 }
 
-// Actualizar estadísticas de asignaciones
 function updateAssignmentsStats(assignments) {
     const totalStudents = assignments.length;
     const totalTickets = assignments.reduce((sum, a) => sum + a.ticketsAssigned, 0);
-    const ticketsSold = assignments.reduce((sum, a) => sum + a.ticketsSold, 0);
-    const totalRaised = assignments.reduce((sum, a) => sum + a.amountRaised, 0);
+    const ticketsSold = assignments.reduce((sum, a) => sum + (a.ticketsSold || 0), 0);
+    const totalRaised = assignments.reduce((sum, a) => sum + (a.amountRaised || 0), 0);
 
     document.getElementById('assignmentsTotalStudents').textContent = totalStudents;
     document.getElementById('assignmentsTotalTickets').textContent = totalTickets;
@@ -561,7 +626,6 @@ function updateAssignmentsStats(assignments) {
     document.getElementById('assignmentsTotalRaised').textContent = formatCurrency(totalRaised);
 }
 
-// Renderizar tabla de asignaciones
 function renderAssignmentsTable(assignments) {
     const tbody = document.getElementById('assignmentsTableBody');
 
@@ -589,14 +653,14 @@ function renderAssignmentsTable(assignments) {
         const student = assignment.student;
         const ticketPrice = selectedEventForAssignments?.ticketPrice || 0;
         const totalValue = assignment.ticketsAssigned * ticketPrice;
-        const paidValue = assignment.ticketsSold * ticketPrice;
+        const paidValue = (assignment.amountRaised || 0);
         const pendingValue = totalValue - paidValue;
         const progress = totalValue > 0 ? Math.round((paidValue / totalValue) * 100) : 0;
 
         let status = 'PENDING';
-        if (assignment.ticketsSold === assignment.ticketsAssigned) {
+        if (paidValue >= totalValue) {
             status = 'COMPLETED';
-        } else if (assignment.ticketsSold > 0) {
+        } else if (paidValue > 0) {
             status = 'PARTIAL';
         }
 
@@ -612,7 +676,7 @@ function renderAssignmentsTable(assignments) {
                     <span class="badge bg-info">${assignment.ticketsAssigned}</span>
                 </td>
                 <td class="text-center">
-                    <span class="badge bg-success">${assignment.ticketsSold}</span>
+                    <span class="badge bg-success">${assignment.ticketsSold || 0}</span>
                 </td>
                 <td>${formatCurrency(totalValue)}</td>
                 <td class="text-success">${formatCurrency(paidValue)}</td>
@@ -634,10 +698,13 @@ function renderAssignmentsTable(assignments) {
                         <button class="btn btn-outline-primary" onclick="editAssignment('${assignment.id}')" title="Editar">
                             <i class="bi bi-pencil"></i>
                         </button>
-                        <button class="btn btn-outline-success" onclick="quickPayment('${assignment.id}')" title="Pago Rápido">
+                        <button class="btn btn-outline-success" onclick="quickPayment('${assignment.id}')" title="Pago">
                             <i class="bi bi-cash"></i>
                         </button>
-                        <button class="btn btn-outline-danger" onclick="deleteAssignment('${assignment.id}')" title="Eliminar">
+                        <button class="btn btn-outline-info" onclick="showPaymentHistory('${assignment.eventId}', '${assignment.studentId}')" title="Historial de Pagos">
+                            <i class="bi bi-clock-history"></i>
+                        </button>
+                        <button class="btn btn-outline-danger" onclick="unassignStudentFromEvent('${assignment.id}')" title="Desasignar">
                             <i class="bi bi-trash"></i>
                         </button>
                     </div>
@@ -651,14 +718,12 @@ function renderAssignmentsTable(assignments) {
 // FUNCIONES DE MODALES
 // ================================
 
-// Mostrar modal de asignación individual
 function showAssignmentModal() {
     if (!selectedEventForAssignments) {
         showError('Debe seleccionar un evento primero');
         return;
     }
 
-    // Limpiar formulario
     document.getElementById('assignmentForm').reset();
     document.getElementById('selectedStudentId').value = '';
     document.getElementById('assignmentStudentResults').innerHTML = '';
@@ -668,37 +733,29 @@ function showAssignmentModal() {
     modal.show();
 }
 
-// Mostrar modal de asignación masiva
 async function showBulkAssignmentModal() {
     if (!selectedEventForAssignments) {
         showError('Debe seleccionar un evento primero');
         return;
     }
 
-    // Limpiar formulario
     document.getElementById('bulkAssignmentForm').reset();
-
-    // Cargar grados y grupos
     await loadGradesAndGroupsForBulkAssignment();
 
     const modal = new bootstrap.Modal(document.getElementById('bulkAssignmentModal'));
     modal.show();
 }
 
-// Mostrar modal de pago de evento
 function showEventPaymentModal() {
     if (!selectedEventForAssignments) {
         showError('Debe seleccionar un evento primero');
         return;
     }
 
-    // Limpiar formulario
     document.getElementById('eventPaymentForm').reset();
     document.getElementById('paymentSelectedStudentId').value = '';
     document.getElementById('paymentStudentResults').innerHTML = '';
     document.getElementById('paymentStudentInfo').style.display = 'none';
-
-    // Establecer fecha actual
     document.getElementById('paymentDate').value = new Date().toISOString().split('T')[0];
 
     const modal = new bootstrap.Modal(document.getElementById('eventPaymentModal'));
@@ -709,7 +766,6 @@ function showEventPaymentModal() {
 // FUNCIONES DE BÚSQUEDA DE ESTUDIANTES
 // ================================
 
-// Buscar estudiantes para asignación
 async function searchStudentsForAssignment(query) {
     const resultsDiv = document.getElementById('assignmentStudentResults');
 
@@ -726,7 +782,6 @@ async function searchStudentsForAssignment(query) {
     }
 
     try {
-        // Mostrar indicador de carga
         resultsDiv.innerHTML = `
             <div class="text-center p-3">
                 <div class="spinner-border spinner-border-sm" role="status">
@@ -738,15 +793,11 @@ async function searchStudentsForAssignment(query) {
 
         console.log('🔍 Searching students with query:', query);
         const students = await api.searchStudents(query);
-        console.log('📋 Students found:', students);
 
-        // Verificar que tenemos un array válido
         if (!Array.isArray(students)) {
-            console.error('Students is not an array:', students);
             throw new Error('No se pudieron cargar los estudiantes');
         }
 
-        // Filtrar estudiantes que ya tienen asignación
         const availableStudents = students.filter(student =>
             student && student.id && !assignmentsData.some(assignment => assignment.studentId === student.id)
         );
@@ -762,17 +813,15 @@ async function searchStudentsForAssignment(query) {
             return;
         }
 
-        // Obtener información adicional de cada estudiante
         const studentsWithInfo = await Promise.all(
             availableStudents.slice(0, 10).map(async (student) => {
                 try {
-                    // Obtener información básica adicional
                     const studentInfo = await api.getStudent(student.id);
                     return {
                         ...student,
                         ...studentInfo,
-                        hasDebt: false, // Se calculará después
-                        otherEvents: 0  // Se calculará después
+                        hasDebt: false,
+                        otherEvents: 0
                     };
                 } catch (error) {
                     console.warn('Could not load additional info for student:', student.id);
@@ -833,15 +882,12 @@ async function searchStudentsForAssignment(query) {
     }
 }
 
-// Seleccionar estudiante para asignación
 async function selectStudentForAssignment(studentId, firstName, lastName, documentNumber, grade, group) {
-    // Verificar que document esté disponible
     if (typeof document === 'undefined' || !document.getElementById) {
         console.error('❌ Document object not available');
         return;
     }
 
-    // Verificar que los elementos existan
     const selectedStudentIdEl = document.getElementById('selectedStudentId');
     const assignmentStudentSearchEl = document.getElementById('assignmentStudentSearch');
     const assignmentStudentResultsEl = document.getElementById('assignmentStudentResults');
@@ -856,7 +902,6 @@ async function selectStudentForAssignment(studentId, firstName, lastName, docume
     assignmentStudentSearchEl.value = `${firstName} ${lastName}`;
     assignmentStudentResultsEl.innerHTML = '';
 
-    // Mostrar información básica inmediatamente
     selectedStudentInfoEl.innerHTML = `
         <div class="card">
             <div class="card-body">
@@ -881,7 +926,6 @@ async function selectStudentForAssignment(studentId, firstName, lastName, docume
         </div>
     `;
 
-    // Cargar información adicional en background
     try {
         const [studentDetails, otherAssignments] = await Promise.all([
             api.getStudent(studentId).catch(() => null),
@@ -890,7 +934,6 @@ async function selectStudentForAssignment(studentId, firstName, lastName, docume
 
         const otherEvents = otherAssignments.filter(assign => assign.eventId !== selectedEventForAssignments?.id);
 
-        // Actualizar con información completa
         selectedStudentInfoEl.innerHTML = `
             <div class="card">
                 <div class="card-body">
@@ -940,11 +983,9 @@ async function selectStudentForAssignment(studentId, firstName, lastName, docume
 
     } catch (error) {
         console.error('Error loading student additional info:', error);
-        // Mantener la información básica si falla la carga adicional
     }
 }
 
-// Buscar estudiantes para pago
 async function searchStudentsForPayment(query) {
     const resultsDiv = document.getElementById('paymentStudentResults');
 
@@ -957,14 +998,11 @@ async function searchStudentsForPayment(query) {
     }
 
     try {
-        // Primero buscar estudiantes en la base de datos
         const allStudents = await api.searchStudents(query);
 
-        // Luego filtrar solo los que tienen asignación en este evento
         const studentsWithAssignment = allStudents.filter(student => {
             return assignmentsData.some(assignment => assignment.studentId === student.id);
         }).map(student => {
-            // Encontrar la asignación correspondiente
             const assignment = assignmentsData.find(a => a.studentId === student.id);
             return {
                 ...assignment,
@@ -973,8 +1011,6 @@ async function searchStudentsForPayment(query) {
         });
 
         if (studentsWithAssignment.length === 0) {
-            // Si no hay estudiantes con asignación, mostrar todos los estudiantes encontrados
-            // para permitir crear una asignación si es necesario
             if (allStudents.length > 0) {
                 resultsDiv.innerHTML = `
                     <div class="alert alert-info">
@@ -1014,11 +1050,13 @@ async function searchStudentsForPayment(query) {
 
         resultsDiv.innerHTML = studentsWithAssignment.map(assignment => {
             const student = assignment.student;
-            const pendingTickets = assignment.ticketsAssigned - assignment.ticketsSold;
-            const pendingAmount = pendingTickets * selectedEventForAssignments.ticketPrice;
+            const ticketPrice = selectedEventForAssignments?.ticketPrice || 0;
+            const totalValue = assignment.ticketsAssigned * ticketPrice;
+            const paidValue = assignment.amountRaised || 0;
+            const pendingAmount = totalValue - paidValue;
 
             return `
-                <div class="card mb-2 student-result" onclick="selectStudentForPayment('${assignment.id}', '${student.id}', '${student.firstName}', '${student.lastName}', '${student.document}', '${student.grade?.name || 'N/A'}', '${student.group?.name || 'N/A'}', ${assignment.ticketsAssigned}, ${assignment.ticketsSold}, ${pendingAmount})" 
+                <div class="card mb-2 student-result" onclick="selectStudentForPayment('${assignment.id}', '${student.id}', '${student.firstName}', '${student.lastName}', '${student.document}', '${student.grade?.name || 'N/A'}', '${student.group?.name || 'N/A'}', ${assignment.ticketsAssigned}, ${assignment.ticketsSold || 0}, ${pendingAmount})" 
                      style="cursor: pointer;">
                     <div class="card-body py-2">
                         <div class="d-flex justify-content-between align-items-center">
@@ -1049,13 +1087,11 @@ async function searchStudentsForPayment(query) {
     }
 }
 
-// Seleccionar estudiante para pago
 function selectStudentForPayment(assignmentId, studentId, firstName, lastName, document, grade, group, ticketsAssigned, ticketsSold, pendingAmount) {
     document.getElementById('paymentSelectedStudentId').value = studentId;
     document.getElementById('paymentStudentSearch').value = `${firstName} ${lastName}`;
     document.getElementById('paymentStudentResults').innerHTML = '';
 
-    // Mostrar información del estudiante y asignación
     document.getElementById('paymentStudentDetails').innerHTML = `
         <p class="mb-1"><strong>${firstName} ${lastName}</strong></p>
         <p class="mb-1"><small>Documento: ${document}</small></p>
@@ -1083,10 +1119,18 @@ function selectStudentForPayment(assignmentId, studentId, firstName, lastName, d
                 <strong class="text-danger">${formatCurrency(pendingAmount)}</strong>
             </div>
         </div>
+        <div class="mt-2">
+            <small class="text-info">
+                Puedes registrar pagos parciales. El monto no debe superar el pendiente.
+            </small>
+        </div>
     `;
 
-    // Sugerir el monto pendiente
-    document.getElementById('paymentAmount').value = pendingAmount;
+    const paymentAmountInput = document.getElementById('paymentAmount');
+    if (paymentAmountInput) {
+        paymentAmountInput.value = pendingAmount;
+        paymentAmountInput.max = pendingAmount > 0 ? pendingAmount : '';
+    }
 
     document.getElementById('paymentStudentInfo').style.display = 'block';
 }
@@ -1095,7 +1139,6 @@ function selectStudentForPayment(assignmentId, studentId, firstName, lastName, d
 // FUNCIONES DE GUARDADO
 // ================================
 
-// Guardar asignación individual
 async function saveAssignment() {
     try {
         const studentId = document.getElementById('selectedStudentId').value;
@@ -1120,7 +1163,6 @@ async function saveAssignment() {
 
         showSuccess('Asignación creada exitosamente');
 
-        // Cerrar modal y recargar datos
         bootstrap.Modal.getInstance(document.getElementById('assignmentModal')).hide();
         await loadEventAssignments(selectedEventForAssignments.id);
 
@@ -1130,7 +1172,6 @@ async function saveAssignment() {
     }
 }
 
-// Guardar pago de evento
 async function saveEventPayment() {
     try {
         const studentId = document.getElementById('paymentSelectedStudentId').value;
@@ -1147,6 +1188,17 @@ async function saveEventPayment() {
         if (!amount || amount <= 0) {
             showError('Debe especificar un monto válido');
             return;
+        }
+
+        const assignment = assignmentsData.find(a => a.studentId === studentId);
+        if (assignment) {
+            const ticketPrice = selectedEventForAssignments?.ticketPrice || 0;
+            const totalValue = assignment.ticketsAssigned * ticketPrice;
+            const pendingValue = totalValue - (assignment.amountRaised || 0);
+            if (amount > pendingValue) {
+                showError('El monto no puede ser mayor al pendiente');
+                return;
+            }
         }
 
         if (!method) {
@@ -1166,13 +1218,642 @@ async function saveEventPayment() {
 
         showSuccess('Pago registrado exitosamente');
 
-        // Cerrar modal y recargar datos
         bootstrap.Modal.getInstance(document.getElementById('eventPaymentModal')).hide();
-        await loadEventAssignments(selectedEventForAssignments.id);
+
+        // CORREGIDO: Actualizar datos y dashboard financiero
+        await Promise.all([
+            loadEventAssignments(selectedEventForAssignments.id),
+            updateFinancialDashboardAfterPayment()
+        ]);
 
     } catch (error) {
         console.error('❌ Error saving payment:', error);
         showError('Error al registrar pago: ' + error.message);
+    }
+}
+
+// CORREGIDO: Función para actualizar dashboard financiero después de registrar pago
+async function updateFinancialDashboardAfterPayment() {
+    try {
+        console.log('💰 Actualizando dashboard financiero después del pago...');
+
+        // Verificar si existe la función de actualización del dashboard
+        if (typeof window.refreshDashboard === 'function') {
+            await window.refreshDashboard();
+            console.log('✅ Dashboard principal actualizado');
+        }
+
+        // Solo actualizar dashboard financiero si estamos en esa página
+        if (typeof window.loadFinancialOverview === 'function') {
+            // Verificar si los elementos del dashboard financiero existen
+            const financialElements = document.querySelector('#financialSummary, #incomeChart, #expenseChart');
+            if (financialElements) {
+                await window.loadFinancialOverview();
+                console.log('✅ Dashboard financiero actualizado');
+            } else {
+                console.log('ℹ️ Dashboard financiero no está en la página actual, omitiendo actualización');
+            }
+        }
+
+        // Disparar evento personalizado para otros módulos
+        const paymentEvent = new CustomEvent('paymentRegistered', {
+            detail: {
+                eventId: selectedEventForAssignments?.id,
+                timestamp: new Date().toISOString()
+            }
+        });
+        window.dispatchEvent(paymentEvent);
+
+    } catch (error) {
+        console.warn('⚠️ Error actualizando dashboard financiero:', error);
+        // No bloquear el flujo principal si falla la actualización del dashboard
+    }
+}
+
+async function quickPayment(assignmentId) {
+    try {
+        console.log('💳 Quick payment for assignment:', assignmentId);
+
+        const assignment = assignmentsData.find(a => a.id === assignmentId);
+        if (!assignment) {
+            showError('Asignación no encontrada');
+            return;
+        }
+
+        const student = assignment.student;
+        const ticketPrice = selectedEventForAssignments?.ticketPrice || 0;
+        const totalValue = assignment.ticketsAssigned * ticketPrice;
+        const paidValue = assignment.amountRaised || 0;
+        const pendingAmount = totalValue - paidValue;
+
+        if (pendingAmount <= 0) {
+            showInfo('Esta asignación ya está completamente pagada');
+            return;
+        }
+
+        const result = await Swal.fire({
+            title: 'Registrar Pago',
+            html: `
+                <div class="text-start">
+                    <div class="mb-3">
+                        <strong>Estudiante:</strong> ${student.firstName} ${student.lastName}<br>
+                        <strong>Documento:</strong> ${student.document}<br>
+                        <strong>Grado:</strong> ${student.grade?.name || 'N/A'} - ${student.group?.name || 'N/A'}
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <div class="row">
+                            <div class="col-6">
+                                <small>Boletos Asignados:</small><br>
+                                <strong>${assignment.ticketsAssigned}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small>Ya Pagado:</small><br>
+                                <strong class="text-success">${formatCurrency(paidValue)}</strong>
+                            </div>
+                        </div>
+                        <div class="row mt-2">
+                            <div class="col-6">
+                                <small>Monto Total:</small><br>
+                                <strong>${formatCurrency(totalValue)}</strong>
+                            </div>
+                            <div class="col-6">
+                                <small>Monto Pendiente:</small><br>
+                                <strong class="text-danger">${formatCurrency(pendingAmount)}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="quickPaymentType" class="form-label">Tipo de Pago:</label>
+                        <select class="form-select" id="quickPaymentType" onchange="toggleQuickPaymentAmount()">
+                            <option value="FULL">Pago Completo (${formatCurrency(pendingAmount)})</option>
+                            <option value="PARTIAL">Pago Parcial</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3" id="quickPaymentAmountContainer" style="display: none;">
+                        <label for="quickPaymentAmount" class="form-label">Monto a Pagar:</label>
+                        <div class="input-group">
+                            <span class="input-group-text">$</span>
+                            <input type="number" class="form-control" id="quickPaymentAmount" 
+                                   min="0" max="${pendingAmount}" step="0.01" placeholder="Ingrese el monto">
+                        </div>
+                        <small class="text-muted">Máximo: ${formatCurrency(pendingAmount)}</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="quickPaymentMethod" class="form-label">Método de Pago:</label>
+                        <select class="form-select" id="quickPaymentMethod">
+                            <option value="CASH">Efectivo</option>
+                            <option value="BANK_TRANSFER">Transferencia</option>
+                            <option value="CARD">Tarjeta</option>
+                            <option value="CHECK">Cheque</option>
+                            <option value="OTHER">Otro</option>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="quickPaymentReference" class="form-label">Referencia (opcional):</label>
+                        <input type="text" class="form-control" id="quickPaymentReference" 
+                               placeholder="Número de transacción, cheque, etc.">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="quickPaymentObservations" class="form-label">Observaciones (opcional):</label>
+                        <textarea class="form-control" id="quickPaymentObservations" rows="2" 
+                                  placeholder="Notas adicionales sobre el pago"></textarea>
+                    </div>
+                </div>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Registrar Pago',
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#28a745',
+            width: '600px',
+            didOpen: () => {
+                window.toggleQuickPaymentAmount = function () {
+                    const type = document.getElementById('quickPaymentType').value;
+                    const container = document.getElementById('quickPaymentAmountContainer');
+                    if (type === 'PARTIAL') {
+                        container.style.display = 'block';
+                        document.getElementById('quickPaymentAmount').required = true;
+                    } else {
+                        container.style.display = 'none';
+                        document.getElementById('quickPaymentAmount').required = false;
+                    }
+                };
+            },
+            preConfirm: () => {
+                const paymentType = document.getElementById('quickPaymentType').value;
+                const method = document.getElementById('quickPaymentMethod').value;
+                const reference = document.getElementById('quickPaymentReference').value;
+                const observations = document.getElementById('quickPaymentObservations').value;
+
+                let amount;
+                if (paymentType === 'FULL') {
+                    amount = pendingAmount;
+                } else {
+                    amount = parseFloat(document.getElementById('quickPaymentAmount').value);
+                    if (!amount || amount <= 0) {
+                        Swal.showValidationMessage('Ingrese un monto válido para el pago parcial');
+                        return false;
+                    }
+                    if (amount > pendingAmount) {
+                        Swal.showValidationMessage('El monto no puede ser mayor al pendiente');
+                        return false;
+                    }
+                }
+
+                if (!method) {
+                    Swal.showValidationMessage('Seleccione un método de pago');
+                    return false;
+                }
+
+                return {
+                    amount: amount,
+                    method: method,
+                    reference: reference,
+                    observations: observations || (paymentType === 'FULL' ? 'Pago completo' : 'Pago parcial')
+                };
+            }
+        });
+
+        if (result.isConfirmed && result.value) {
+            const paymentData = {
+                amount: result.value.amount,
+                method: result.value.method,
+                reference: result.value.reference,
+                observations: result.value.observations,
+                date: new Date().toISOString()
+            };
+
+            console.log('💰 Processing payment:', paymentData);
+            await api.addPartialPayment(assignment.eventId, assignment.studentId, paymentData);
+
+            showSuccess(`Pago de ${formatCurrency(result.value.amount)} registrado exitosamente`);
+            await loadEventAssignments(selectedEventForAssignments.id);
+        }
+    } catch (error) {
+        console.error('Error en el pago rápido:', error);
+        showError('No se pudo registrar el pago: ' + error.message);
+    }
+}
+
+// ========================================
+// FUNCIONES DE HISTORIAL DE PAGOS
+// ========================================
+
+async function showPaymentHistory(eventId, studentId) {
+    try {
+        console.log(`🔍 Fetching payment history for event ${eventId} and student ${studentId}`);
+
+        // CORREGIDO: Cerrar modal anterior si existe antes de abrir uno nuevo
+        const existingModal = bootstrap.Modal.getInstance(document.getElementById('paymentHistoryModal'));
+        if (existingModal) {
+            existingModal.hide();
+            // Esperar a que se cierre completamente
+            await new Promise(resolve => setTimeout(resolve, 300));
+        }
+
+        const modal = new bootstrap.Modal(document.getElementById('paymentHistoryModal'), {
+            backdrop: 'static', // CORREGIDO: Prevenir cierre accidental
+            keyboard: true
+        });
+
+        const modalTitle = document.getElementById('paymentHistoryModalTitle');
+        const historyTableBody = document.getElementById('paymentHistoryTableBody');
+
+        // Mostrar loading state
+        modalTitle.textContent = 'Cargando historial de pagos...';
+        historyTableBody.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="mt-2 text-muted">Cargando historial de pagos...</p>
+                </td>
+            </tr>
+        `;
+
+        modal.show();
+
+        // Cargar datos en paralelo
+        const [history, student, event] = await Promise.all([
+            api.getPaymentHistory(eventId, studentId),
+            api.getStudent(studentId),
+            Promise.resolve(selectedEventForAssignments)
+        ]);
+
+        if (!student || !event) {
+            throw new Error('No se pudo cargar la información del estudiante o del evento.');
+        }
+
+        // Actualizar información del modal
+        modalTitle.textContent = `Historial de Pagos - ${student.firstName} ${student.lastName}`;
+        document.getElementById('paymentHistoryStudentInfo').textContent =
+            `Estudiante: ${student.firstName} ${student.lastName} (${student.document})`;
+        document.getElementById('paymentHistoryEventInfo').textContent =
+            `Evento: ${event.name} - Precio por boleto: ${formatCurrency(event.ticketPrice)}`;
+
+        // CORREGIDO: Configurar botón de exportación sin duplicar event listeners
+        const exportButton = document.getElementById('exportPaymentHistory');
+        if (exportButton) {
+            // Remover listeners anteriores
+            const newExportButton = exportButton.cloneNode(true);
+            exportButton.parentNode.replaceChild(newExportButton, exportButton);
+
+            // Agregar nuevo listener
+            newExportButton.addEventListener('click', () => {
+                console.log('📥 Exporting payment history...');
+                exportPaymentHistoryToCSV(student, event, history);
+            });
+        }
+
+        // Renderizar tabla de historial
+        if (history.length === 0) {
+            historyTableBody.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted py-4">
+                        <i class="bi bi-folder-x fs-1 text-muted"></i>
+                        <p class="mt-2">No hay pagos registrados para este estudiante en este evento.</p>
+                        <button class="btn btn-primary btn-sm" onclick="quickPayment('${getAssignmentIdByStudentId(studentId)}')">
+                            <i class="bi bi-plus-circle"></i> Registrar Primer Pago
+                        </button>
+                    </td>
+                </tr>
+            `;
+        } else {
+            historyTableBody.innerHTML = history.map((payment, index) => {
+                return `
+                    <tr id="payment-row-${payment.id}">
+                        <td><small class="text-muted">${payment.id}</small></td>
+                        <td>${formatDateTime(payment.date)}</td>
+                        <td><strong class="text-success">${formatCurrency(payment.amount)}</strong></td>
+                        <td>
+                            <span class="badge bg-secondary">${getPaymentMethodLabel(payment.method)}</span>
+                        </td>
+                        <td>${payment.reference || '<span class="text-muted">N/A</span>'}</td>
+                        <td><small>${payment.observations || '<span class="text-muted">Sin observaciones</span>'}</small></td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger" 
+                                    onclick="deletePaymentFromHistory('${payment.id}', '${eventId}', '${studentId}')" 
+                                    title="Eliminar Pago"
+                                    data-payment-id="${payment.id}">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        console.log(`✅ Payment history loaded successfully: ${history.length} payments`);
+
+    } catch (error) {
+        console.error('❌ Error showing payment history:', error);
+
+        // CORREGIDO: Cerrar modal y mostrar error
+        const modal = bootstrap.Modal.getInstance(document.getElementById('paymentHistoryModal'));
+        if (modal) {
+            modal.hide();
+        }
+
+        setTimeout(() => {
+            Swal.fire({
+                title: 'Error',
+                text: 'Error al mostrar el historial de pagos: ' + error.message,
+                icon: 'error',
+                confirmButtonText: 'Entendido'
+            });
+        }, 300);
+    }
+}
+
+function getAssignmentIdByStudentId(studentId) {
+    const assignment = assignmentsData.find(a => a.studentId === studentId);
+    return assignment ? assignment.id : null;
+}
+
+function getPaymentMethodLabel(method) {
+    const methods = {
+        'CASH': 'Efectivo',
+        'BANK_TRANSFER': 'Transferencia',
+        'CARD': 'Tarjeta',
+        'CHECK': 'Cheque',
+        'OTHER': 'Otro'
+    };
+    return methods[method] || method || 'No especificado';
+}
+
+// CORREGIDA: Función para obtener ID de asignación por ID de estudiante
+function getAssignmentIdByStudentId(studentId) {
+    if (!studentId || !Array.isArray(assignmentsData)) {
+        console.warn('Invalid studentId or assignmentsData not available');
+        return null;
+    }
+
+    const assignment = assignmentsData.find(a => a.studentId === studentId);
+    return assignment ? assignment.id : null;
+}
+
+// CORREGIDA: Función para formatear fecha y hora de manera segura
+function formatDateTime(dateString) {
+    if (!dateString) return 'Fecha no disponible';
+
+    try {
+        const date = new Date(dateString);
+        if (isNaN(date.getTime())) {
+            return 'Fecha inválida';
+        }
+
+        return date.toLocaleDateString('es-ES', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return 'Error en fecha';
+    }
+}
+
+// CORREGIDA: Función para formatear moneda de manera segura
+function formatCurrency(amount) {
+    if (typeof amount !== 'number') {
+        amount = parseFloat(amount) || 0;
+    }
+
+    return new Intl.NumberFormat('es-CO', {
+        style: 'currency',
+        currency: 'COP',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0
+    }).format(amount);
+}
+
+// CORREGIDA: Función para mostrar mensajes de éxito
+function showSuccess(message) {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: '¡Éxito!',
+            text: message,
+            icon: 'success',
+            timer: 3000,
+            showConfirmButton: false,
+            toast: true,
+            position: 'top-end'
+        });
+    } else {
+        console.log('✅ SUCCESS:', message);
+        alert('Éxito: ' + message);
+    }
+}
+
+// CORREGIDA: Función para mostrar mensajes de error
+function showError(message) {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'Error',
+            text: message,
+            icon: 'error',
+            confirmButtonText: 'Entendido'
+        });
+    } else {
+        console.error('❌ ERROR:', message);
+        alert('Error: ' + message);
+    }
+}
+
+// CORREGIDA: Función para mostrar mensajes informativos
+function showInfo(message) {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            title: 'Información',
+            text: message,
+            icon: 'info',
+            confirmButtonText: 'Entendido'
+        });
+    } else {
+        console.log('ℹ️ INFO:', message);
+        alert('Info: ' + message);
+    }
+}
+
+async function deletePaymentFromHistory(paymentId, eventId, studentId) {
+    try {
+        console.log(`🗑️ Attempting to delete payment ${paymentId}`);
+
+        const result = await Swal.fire({
+            title: '¿Estás seguro?',
+            text: "Esta acción eliminará el pago permanentemente.",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            confirmButtonText: 'Sí, eliminar',
+            cancelButtonText: 'Cancelar',
+            allowOutsideClick: true,  // CORREGIDO: Permitir cerrar clickeando fuera
+            allowEscapeKey: true,     // CORREGIDO: Permitir cerrar con ESC
+            showLoaderOnConfirm: true, // CORREGIDO: Mostrar loader durante la operación
+            preConfirm: async () => {
+                try {
+                    // Eliminar el pago
+                    const deleteResult = await api.deletePayment(paymentId);
+                    console.log('✅ Payment deletion result:', deleteResult);
+                    return deleteResult;
+                } catch (error) {
+                    console.error('❌ Error in preConfirm:', error);
+                    Swal.showValidationMessage(`Error: ${error.message}`);
+                    return false;
+                }
+            }
+        });
+
+        if (result.isConfirmed && result.value) {
+            // Mostrar mensaje de éxito
+            await Swal.fire({
+                title: '¡Eliminado!',
+                text: 'El pago ha sido eliminado exitosamente.',
+                icon: 'success',
+                timer: 1500,
+                showConfirmButton: false
+            });
+
+            console.log('🔄 Refreshing payment history and assignments...');
+
+            // CORREGIDO: Forzar limpieza de caché y recarga completa
+            try {
+                // Limpiar cualquier caché local
+                if (window.assignmentsData) {
+                    window.assignmentsData = [];
+                }
+
+                // Recargar datos en paralelo para mejor rendimiento
+                await Promise.all([
+                    showPaymentHistory(eventId, studentId),
+                    loadEventAssignments(eventId),
+                    updateFinancialDashboardAfterPayment() // Actualizar dashboard financiero
+                ]);
+
+                // Forzar actualización de estadísticas
+                if (selectedEventForAssignments) {
+                    const updatedAssignments = await api.getEventAssignments(eventId);
+                    updateAssignmentsStats(updatedAssignments);
+                }
+
+                console.log('✅ Data refreshed successfully');
+            } catch (refreshError) {
+                console.error('❌ Error refreshing data:', refreshError);
+                // Mostrar error pero no bloquear el flujo
+                showError('Los datos se eliminaron correctamente, pero hubo un problema al actualizar la vista. Refresca la página si es necesario.');
+            }
+
+        } else if (result.dismiss) {
+            console.log('ℹ️ Payment deletion cancelled by user');
+        }
+
+    } catch (error) {
+        console.error('❌ Unexpected error in deletePaymentFromHistory:', error);
+
+        // CORREGIDO: Cerrar cualquier modal abierto antes de mostrar error
+        const openModals = document.querySelectorAll('.modal.show');
+        openModals.forEach(modal => {
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        });
+
+        // Mostrar error después de un breve delay para permitir que se cierren los modales
+        setTimeout(() => {
+            Swal.fire({
+                title: 'Error',
+                text: 'Error al eliminar el pago: ' + error.message,
+                icon: 'error',
+                confirmButtonText: 'Entendido'
+            });
+        }, 300);
+    }
+}
+
+function exportPaymentHistoryToCSV(student, event, history) {
+    try {
+        console.log('📥 Starting CSV export...');
+
+        let csvContent = "data:text/csv;charset=utf-8,";
+
+        const headers = [
+            'ID Pago',
+            'Fecha',
+            'Monto Pagado',
+            'Método',
+            'Referencia',
+            'Observaciones'
+        ];
+        csvContent += headers.map(h => `"${h}"`).join(',') + '\r\n';
+
+        // Información del estudiante y evento
+        csvContent += `"Estudiante","${student.firstName} ${student.lastName}","Documento","${student.document}","Evento","${event.name}"\r\n`;
+        csvContent += `"","","","","",""\r\n`; // Línea vacía
+
+        // Datos de pagos
+        if (history.length > 0) {
+            history.forEach(payment => {
+                const row = [
+                    payment.id || '',
+                    formatDateTime(payment.date) || '',
+                    payment.amount || 0,
+                    getPaymentMethodLabel(payment.method) || '',
+                    payment.reference || '',
+                    payment.observations || ''
+                ];
+                csvContent += row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',') + '\r\n';
+            });
+        } else {
+            csvContent += `"Sin pagos registrados","","","","",""\r\n`;
+        }
+
+        // CORREGIDO: Crear y descargar archivo con mejor manejo de errores
+        try {
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+
+            const fileName = `HistorialPagos_${event.name.replace(/[^a-zA-Z0-9]/g, '_')}_${student.firstName}_${student.lastName}_${new Date().toISOString().split('T')[0]}.csv`;
+            link.setAttribute("download", fileName);
+
+            // CORREGIDO: Agregar al DOM temporalmente para asegurar la descarga
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            console.log('✅ CSV export completed:', fileName);
+
+            // Mostrar confirmación
+            Swal.fire({
+                title: '¡Exportado!',
+                text: 'El historial de pagos ha sido exportado exitosamente.',
+                icon: 'success',
+                timer: 2000,
+                showConfirmButton: false
+            });
+
+        } catch (downloadError) {
+            console.error('❌ Error during file download:', downloadError);
+            throw new Error('Error al descargar el archivo');
+        }
+
+    } catch (error) {
+        console.error('❌ Error exporting payment history:', error);
+        Swal.fire({
+            title: 'Error de Exportación',
+            text: 'Error al exportar el historial: ' + error.message,
+            icon: 'error',
+            confirmButtonText: 'Entendido'
+        });
     }
 }
 
@@ -1217,34 +1898,29 @@ function refreshAssignments() {
 }
 
 function exportAssignments() {
-    // Implementar exportación de asignaciones
     console.log('Export assignments functionality');
 }
 
 function setupAssignmentsEventListeners() {
-    // Event listeners específicos para asignaciones
-    
-    // Filtros de asignaciones
     const gradeFilter = document.getElementById('assignmentGradeFilter');
     const groupFilter = document.getElementById('assignmentGroupFilter');
     const statusFilter = document.getElementById('assignmentStatusFilter');
-    
+
     if (gradeFilter) {
         gradeFilter.addEventListener('change', filterAssignments);
     }
-    
+
     if (groupFilter) {
         groupFilter.addEventListener('change', filterAssignments);
     }
-    
+
     if (statusFilter) {
         statusFilter.addEventListener('change', filterAssignments);
     }
-    
+
     console.log('✅ Assignment event listeners setup');
 }
 
-// Cargar filtros de asignaciones
 async function loadAssignmentFilters() {
     try {
         const gradeFilter = document.getElementById('assignmentGradeFilter');
@@ -1272,14 +1948,13 @@ function filterAssignments() {
     const gradeFilter = document.getElementById('assignmentGradeFilter')?.value;
     const groupFilter = document.getElementById('assignmentGroupFilter')?.value;
     const statusFilter = document.getElementById('assignmentStatusFilter')?.value;
-    
+
     console.log('🔍 Filtering assignments:', { gradeFilter, groupFilter, statusFilter });
-    
+
     if (!selectedEventForAssignments) {
         return;
     }
-    
-    // Reload assignments with filters
+
     loadEventAssignments(selectedEventForAssignments.id, {
         gradeId: gradeFilter || undefined,
         groupId: groupFilter || undefined,
@@ -1287,7 +1962,6 @@ function filterAssignments() {
     });
 }
 
-// Alternar opciones de asignación masiva
 function toggleBulkAssignmentOptions() {
     const assignmentType = document.getElementById('bulkAssignmentType')?.value;
     const gradeSelection = document.getElementById('bulkGradeSelection');
@@ -1295,13 +1969,11 @@ function toggleBulkAssignmentOptions() {
     const mixedSelection = document.getElementById('bulkMixedSelection');
     const previewContainer = document.getElementById('bulkAssignmentPreview');
 
-    // Ocultar todas las opciones
     if (gradeSelection) gradeSelection.style.display = 'none';
     if (groupSelection) groupSelection.style.display = 'none';
     if (mixedSelection) mixedSelection.style.display = 'none';
     if (previewContainer) previewContainer.style.display = 'none';
 
-    // Mostrar la opción correspondiente
     switch (assignmentType) {
         case 'BY_GRADE':
             if (gradeSelection) gradeSelection.style.display = 'block';
@@ -1313,14 +1985,12 @@ function toggleBulkAssignmentOptions() {
             if (mixedSelection) mixedSelection.style.display = 'block';
             break;
         default:
-            // No mostrar nada si no hay selección
             break;
     }
 
     console.log('✅ Bulk assignment options toggled for type:', assignmentType);
 }
 
-// Vista previa de asignación masiva
 function previewBulkAssignment() {
     const assignmentType = document.getElementById('bulkAssignmentType')?.value;
     const ticketsPerStudent = parseInt(document.getElementById('bulkTicketsPerStudent')?.value) || 1;
@@ -1397,7 +2067,6 @@ function previewBulkAssignment() {
     }
 }
 
-// Guardar asignación masiva
 async function saveBulkAssignment() {
     try {
         const assignmentType = document.getElementById('bulkAssignmentType')?.value;
@@ -1452,7 +2121,6 @@ async function saveBulkAssignment() {
 
         showSuccess(`Asignación masiva completada: ${result.assignmentsCreated} asignaciones creadas`);
 
-        // Cerrar modal y recargar datos
         bootstrap.Modal.getInstance(document.getElementById('bulkAssignmentModal')).hide();
         await loadEventAssignments(selectedEventForAssignments.id);
 
@@ -1462,12 +2130,10 @@ async function saveBulkAssignment() {
     }
 }
 
-// Editar asignación
 async function editAssignment(assignmentId) {
     try {
         console.log('✏️ Editing assignment:', assignmentId);
 
-        // Encontrar la asignación en los datos actuales
         const assignment = assignmentsData.find(a => a.id === assignmentId);
 
         if (!assignment) {
@@ -1477,12 +2143,10 @@ async function editAssignment(assignmentId) {
 
         const student = assignment.student;
 
-        // Mostrar modal de edición (reutilizar el modal de asignación)
         document.getElementById('assignmentStudentSearch').value = `${student.firstName} ${student.lastName}`;
         document.getElementById('selectedStudentId').value = student.id;
         document.getElementById('ticketsAssigned').value = assignment.ticketsAssigned;
 
-        // Mostrar información del estudiante
         document.getElementById('selectedStudentInfo').innerHTML = `
             <div class="card">
                 <div class="card-body">
@@ -1500,7 +2164,7 @@ async function editAssignment(assignmentId) {
                     <div class="row mt-2">
                         <div class="col-md-6">
                             <small class="text-muted">Boletos Vendidos:</small><br>
-                            <strong class="text-success">${assignment.ticketsSold}</strong>
+                            <strong class="text-success">${assignment.ticketsSold || 0}</strong>
                         </div>
                         <div class="col-md-6">
                             <small class="text-muted">Monto Recaudado:</small><br>
@@ -1511,10 +2175,8 @@ async function editAssignment(assignmentId) {
             </div>
         `;
 
-        // Cambiar el título del modal
         document.querySelector('#assignmentModal .modal-title').textContent = 'Editar Asignación';
 
-        // Agregar campo oculto para el ID de asignación
         let assignmentIdInput = document.getElementById('editingAssignmentId');
         if (!assignmentIdInput) {
             assignmentIdInput = document.createElement('input');
@@ -1533,173 +2195,75 @@ async function editAssignment(assignmentId) {
     }
 }
 
-// Pago rápido
-async function quickPayment(assignmentId) {
+async function unassignStudentFromEvent(assignmentId) {
     try {
-        console.log('💳 Quick payment for assignment:', assignmentId);
+        console.log('🗑️ Unassigning student from event:', assignmentId);
 
-        // Encontrar la asignación
         const assignment = assignmentsData.find(a => a.id === assignmentId);
-
         if (!assignment) {
             showError('Asignación no encontrada');
             return;
         }
 
         const student = assignment.student;
-        const pendingTickets = assignment.ticketsAssigned - assignment.ticketsSold;
-        const pendingAmount = pendingTickets * selectedEventForAssignments.ticketPrice;
+        const hasPaidAmount = assignment.amountRaised > 0;
 
-        if (pendingAmount <= 0) {
-            showInfo('Esta asignación ya está completamente pagada');
-            return;
-        }
-
-        // Mostrar modal de confirmación con pago rápido
-        const result = await Swal.fire({
-            title: 'Pago Rápido',
-            html: `
-                <div class="text-start">
-                    <p><strong>Estudiante:</strong> ${student.firstName} ${student.lastName}</p>
-                    <p><strong>Documento:</strong> ${student.document}</p>
-                    <p><strong>Boletos Pendientes:</strong> ${pendingTickets}</p>
-                    <p><strong>Monto a Pagar:</strong> ${formatCurrency(pendingAmount)}</p>
-                    <hr>
-                    <div class="mb-3">
-                        <label for="quickPaymentMethod" class="form-label">Método de Pago:</label>
-                        <select class="form-select" id="quickPaymentMethod">
-                            <option value="CASH">Efectivo</option>
-                            <option value="BANK_TRANSFER">Transferencia</option>
-                            <option value="CARD">Tarjeta</option>
-                            <option value="OTHER">Otro</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label for="quickPaymentReference" class="form-label">Referencia (opcional):</label>
-                        <input type="text" class="form-control" id="quickPaymentReference" placeholder="Número de transacción, etc.">
-                    </div>
-                </div>
-            `,
+        let confirmationConfig = {
+            title: '¿Desasignar estudiante?',
+            text: `Se eliminará la asignación de ${student.firstName} ${student.lastName}`,
+            icon: 'question',
             showCancelButton: true,
-            confirmButtonText: 'Registrar Pago',
+            confirmButtonText: 'Sí, desasignar',
             cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#28a745',
-            preConfirm: () => {
-                const method = document.getElementById('quickPaymentMethod').value;
-                const reference = document.getElementById('quickPaymentReference').value;
+            confirmButtonColor: '#dc3545'
+        };
 
-                if (!method) {
-                    Swal.showValidationMessage('Selecciona un método de pago');
-                    return false;
-                }
-
-                return { method, reference };
-            }
-        });
-
-        if (result.isConfirmed) {
-            const paymentData = {
-                studentId: student.id,
-                amount: pendingAmount,
-                method: result.value.method,
-                reference: result.value.reference,
-                observations: `Pago rápido - ${pendingTickets} boleto(s)`
-            };
-
-            await api.createEventPayment(selectedEventForAssignments.id, paymentData);
-
-            showSuccess('Pago registrado exitosamente');
-            await loadEventAssignments(selectedEventForAssignments.id);
-        }
-
-    } catch (error) {
-        console.error('❌ Error in quick payment:', error);
-        showError('Error al procesar pago rápido: ' + error.message);
-    }
-}
-
-// Eliminar asignación
-async function deleteAssignment(assignmentId) {
-    try {
-        console.log('🗑️ Deleting assignment:', assignmentId);
-
-        // Encontrar la asignación
-        const assignment = assignmentsData.find(a => a.id === assignmentId);
-
-        if (!assignment) {
-            showError('Asignación no encontrada');
-            return;
-        }
-
-        const student = assignment.student;
-
-        // Verificar si tiene boletos vendidos
-        if (assignment.ticketsSold > 0) {
-            const result = await Swal.fire({
+        if (hasPaidAmount) {
+            confirmationConfig = {
                 title: '⚠️ Atención',
                 html: `
                     <div class="text-start">
-                        <p>El estudiante <strong>${student.firstName} ${student.lastName}</strong> ya tiene <strong>${assignment.ticketsSold} boleto(s) vendido(s)</strong>.</p>
-                        <p>¿Estás seguro de que quieres eliminar esta asignación?</p>
-                        <p class="text-danger"><small>Esta acción no se puede deshacer.</small></p>
+                        <p>El estudiante <strong>${student.firstName} ${student.lastName}</strong> ya tiene pagos registrados por un total de <strong>${formatCurrency(assignment.amountRaised)}</strong>.</p>
+                        <p>¿Estás seguro de que quieres desasignar este estudiante?</p>
+                        <p class="text-danger"><small>Los pagos registrados se mantendrán en el historial.</small></p>
                     </div>
                 `,
                 icon: 'warning',
                 showCancelButton: true,
-                confirmButtonText: 'Sí, eliminar',
+                confirmButtonText: 'Sí, desasignar',
                 cancelButtonText: 'Cancelar',
                 confirmButtonColor: '#dc3545'
-            });
-
-            if (!result.isConfirmed) return;
-        } else {
-            const result = await Swal.fire({
-                title: '¿Eliminar asignación?',
-                text: `Se eliminará la asignación de ${student.firstName} ${student.lastName}`,
-                icon: 'question',
-                showCancelButton: true,
-                confirmButtonText: 'Sí, eliminar',
-                cancelButtonText: 'Cancelar',
-                confirmButtonColor: '#dc3545'
-            });
-
-            if (!result.isConfirmed) return;
+            };
         }
 
-        await api.deleteEventAssignment(selectedEventForAssignments.id, assignmentId);
+        const result = await Swal.fire(confirmationConfig);
 
-        showSuccess('Asignación eliminada exitosamente');
-        await loadEventAssignments(selectedEventForAssignments.id);
+        if (result.isConfirmed) {
+            await api.deleteEventAssignment(selectedEventForAssignments.id, assignmentId);
+            showSuccess('Estudiante desasignado exitosamente');
+            await loadEventAssignments(selectedEventForAssignments.id);
+        }
 
     } catch (error) {
-        console.error('❌ Error deleting assignment:', error);
-        showError('Error al eliminar asignación: ' + error.message);
+        console.error('❌ Error unassigning student:', error);
+        showError('Error al desasignar estudiante: ' + error.message);
     }
 }
 
-// Cargar grados y grupos para asignación masiva
 async function loadGradesAndGroupsForBulkAssignment() {
     try {
-        console.log('📋 Loading grades and groups for bulk assignment...');
+        console.log('📋 Loading grades and groups for bulk assignment');
 
-        // Usar los datos ya cargados o cargar nuevos
-        let grades = eventsCurrentGrades;
-        let groups = eventsCurrentGroups;
+        const [grades, groups] = await Promise.all([
+            api.getGrades(),
+            api.getGroups()
+        ]);
 
-        if (!grades || grades.length === 0) {
-            grades = await api.getGrades();
-        }
+        const bulkGradeCheckboxes = document.getElementById('bulkGradeCheckboxes');
+        const bulkMixedGradeCheckboxes = document.getElementById('bulkMixedGradeCheckboxes');
 
-        if (!groups || groups.length === 0) {
-            groups = await api.getGroups();
-        }
-
-        // Cargar checkboxes de grados
-        const gradeCheckboxes = document.getElementById('bulkGradeCheckboxes');
-        const mixedGradeCheckboxes = document.getElementById('bulkMixedGradeCheckboxes');
-
-        if (gradeCheckboxes) {
-            gradeCheckboxes.innerHTML = grades.map(grade => `
+        if (bulkGradeCheckboxes && bulkMixedGradeCheckboxes) {
+            const gradeCheckboxHTML = grades.map(grade => `
                 <div class="col-md-6 mb-2">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" value="${grade.id}" id="grade_${grade.id}">
@@ -1709,45 +2273,28 @@ async function loadGradesAndGroupsForBulkAssignment() {
                     </div>
                 </div>
             `).join('');
+
+            bulkGradeCheckboxes.innerHTML = gradeCheckboxHTML;
+            bulkMixedGradeCheckboxes.innerHTML = gradeCheckboxHTML.replace(/grade_/g, 'mixed_grade_');
         }
 
-        if (mixedGradeCheckboxes) {
-            mixedGradeCheckboxes.innerHTML = grades.map(grade => `
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="checkbox" value="${grade.id}" id="mixed_grade_${grade.id}">
-                    <label class="form-check-label" for="mixed_grade_${grade.id}">
-                        ${grade.name}
-                    </label>
-                </div>
-            `).join('');
-        }
+        const bulkGroupCheckboxes = document.getElementById('bulkGroupCheckboxes');
+        const bulkMixedGroupCheckboxes = document.getElementById('bulkMixedGroupCheckboxes');
 
-        // Cargar checkboxes de grupos
-        const groupCheckboxes = document.getElementById('bulkGroupCheckboxes');
-        const mixedGroupCheckboxes = document.getElementById('bulkMixedGroupCheckboxes');
-
-        if (groupCheckboxes) {
-            groupCheckboxes.innerHTML = groups.map(group => `
+        if (bulkGroupCheckboxes && bulkMixedGroupCheckboxes) {
+            const groupCheckboxHTML = groups.map(group => `
                 <div class="col-md-6 mb-2">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" value="${group.id}" id="group_${group.id}">
                         <label class="form-check-label" for="group_${group.id}">
-                            ${group.name} (${group.grade?.name || 'N/A'})
+                            ${group.name} (${group.grade?.name || 'Sin grado'})
                         </label>
                     </div>
                 </div>
             `).join('');
-        }
 
-        if (mixedGroupCheckboxes) {
-            mixedGroupCheckboxes.innerHTML = groups.map(group => `
-                <div class="form-check mb-1">
-                    <input class="form-check-input" type="checkbox" value="${group.id}" id="mixed_group_${group.id}">
-                    <label class="form-check-label" for="mixed_group_${group.id}">
-                        ${group.name} (${group.grade?.name || 'N/A'})
-                    </label>
-                </div>
-            `).join('');
+            bulkGroupCheckboxes.innerHTML = groupCheckboxHTML;
+            bulkMixedGroupCheckboxes.innerHTML = groupCheckboxHTML.replace(/group_/g, 'mixed_group_');
         }
 
         console.log('✅ Grades and groups loaded for bulk assignment');
@@ -1758,6 +2305,25 @@ async function loadGradesAndGroupsForBulkAssignment() {
 }
 
 // Exponer funciones globalmente
+window.initEventAssignments = initEventAssignments;
+window.selectEventForAssignments = selectEventForAssignments;
+window.showAssignmentModal = showAssignmentModal;
+window.showBulkAssignmentModal = showBulkAssignmentModal;
+window.showEventPaymentModal = showEventPaymentModal;
+window.searchStudentsForAssignment = searchStudentsForAssignment;
+window.selectStudentForAssignment = selectStudentForAssignment;
+window.searchStudentsForPayment = searchStudentsForPayment;
+window.selectStudentForPayment = selectStudentForPayment;
+window.saveAssignment = saveAssignment;
+window.saveEventPayment = saveEventPayment;
+window.saveBulkAssignment = saveBulkAssignment;
 window.quickPayment = quickPayment;
 window.editAssignment = editAssignment;
-window.deleteAssignment = deleteAssignment;
+window.unassignStudentFromEvent = unassignStudentFromEvent;
+window.showPaymentHistory = showPaymentHistory;
+window.deletePaymentFromHistory = deletePaymentFromHistory;
+window.refreshAssignments = refreshAssignments;
+window.exportAssignments = exportAssignments;
+window.filterAssignments = filterAssignments;
+window.toggleBulkAssignmentOptions = toggleBulkAssignmentOptions;
+window.previewBulkAssignment = previewBulkAssignment;

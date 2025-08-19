@@ -643,8 +643,8 @@ function clearFundFilters() {
 window.initFunds = initFunds;
 window.loadFunds = loadFunds;
 window.showCreateFundModal = showCreateFundModal;
-// Vi
-ew fund details
+
+// View fund details
 async function viewFund(fundId) {
     try {
         showLoading();

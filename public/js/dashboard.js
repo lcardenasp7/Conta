@@ -329,8 +329,12 @@ async function loadIncomeExpenseChart() {
     if (!ctx) return;
 
     // Destroy existing chart more thoroughly
-    if (window.incomeExpenseChart) {
-        window.incomeExpenseChart.destroy();
+    if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
+        try {
+            window.incomeExpenseChart.destroy();
+        } catch (e) {
+            console.log('Error destroying income expense chart:', e);
+        }
         window.incomeExpenseChart = null;
     }
     
@@ -407,9 +411,13 @@ async function loadIncomeExpenseChart() {
 // Fallback chart with sample data
 function loadSampleIncomeExpenseChart(ctx) {
     // Destroy existing chart if it exists
-    if (incomeExpenseChart) {
-        incomeExpenseChart.destroy();
-        incomeExpenseChart = null;
+    if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
+        try {
+            window.incomeExpenseChart.destroy();
+        } catch (e) {
+            console.log('Error destroying sample chart:', e);
+        }
+        window.incomeExpenseChart = null;
     }
     
     const data = {
@@ -436,7 +444,7 @@ function loadSampleIncomeExpenseChart(ctx) {
         ]
     };
 
-    incomeExpenseChart = new Chart(ctx, {
+    window.incomeExpenseChart = new Chart(ctx, {
         type: 'line',
         data: data,
         options: {
@@ -475,8 +483,12 @@ async function loadIncomeDistributionChart() {
     if (!ctx) return;
 
     // Destroy existing chart more thoroughly
-    if (window.incomeDistributionChart) {
-        window.incomeDistributionChart.destroy();
+    if (window.incomeDistributionChart && typeof window.incomeDistributionChart.destroy === 'function') {
+        try {
+            window.incomeDistributionChart.destroy();
+        } catch (e) {
+            console.log('Error destroying income distribution chart:', e);
+        }
         window.incomeDistributionChart = null;
     }
     

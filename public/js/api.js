@@ -902,6 +902,24 @@ class API {
         });
     }
 
+    // Crear transacción de fondo
+    async createFundTransaction(transactionData) {
+        console.log('💰 Creating fund transaction:', transactionData);
+        return this.request('/funds/transactions', {
+            method: 'POST',
+            body: JSON.stringify(transactionData)
+        });
+    }
+
+    // Crear transferencia entre fondos
+    async createFundTransfer(transferData) {
+        console.log('🔄 Creating fund transfer:', transferData);
+        return this.request('/funds/transfer', {
+            method: 'POST',
+            body: JSON.stringify(transferData)
+        });
+    }
+
 }
 
 // Create global API instance

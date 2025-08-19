@@ -242,6 +242,186 @@ router.get('/:id/transactions', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /api/funds/transactions - Crear nueva transacción de fondo
+router.post('/transactions', authenticateToken, async (req, res) => {
+    try {
+        const { fundId, type, amount, description, category } = req.body;
+        const userId = req.user.userId;
+
+        // Validaciones
+        if (!fundId || !type || !amount || !description) {
+            return res.status(400).json({ 
+                error: 'Fondo, tipo, monto y descripción son requeridos' 
+            });
+        }
+
+        if (!['INCOME', 'EXPENSE'].includes(type)) {
+            return res.status(400).json({ 
+                error: 'Tipo debe ser INCOME o EXPENSE' 
+            });
+        }
+
+        // Verificar que el fondo existe
+        const fund = await prisma.fund.findUnique({
+            where: { id: fundId }
+        });
+
+        if (!fund) {
+            return res.status(404).json({ 
+                error: 'Fondo no encontrado' 
+            });
+        }
+
+        // Para gastos, verificar que hay suficiente saldo
+        if (type === 'EXPENSE' && fund.currentBalance < Math.abs(amount)) {
+            return res.status(400).json({ 
+                error: 'Saldo insuficiente en el fondo' 
+            });
+        }
+
+        // Crear la transacción
+        const transaction = await prisma.fundTransaction.create({
+            data: {
+                fundId,
+                type,
+                amount: parseFloat(amount),
+                description,
+                category: category || 'OTHER',
+                performedBy: userId
+            }
+        });
+
+        // Actualizar el saldo del fondo
+        const newBalance = fund.currentBalance + parseFloat(amount);
+        const updateData = {
+            currentBalance: newBalance
+        };
+
+        if (type === 'INCOME') {
+            updateData.totalIncome = fund.totalIncome + Math.abs(parseFloat(amount));
+        } else {
+            updateData.totalExpenses = fund.totalExpenses + Math.abs(parseFloat(amount));
+        }
+
+        await prisma.fund.update({
+            where: { id: fundId },
+            data: updateData
+        });
+
+        res.status(201).json(transaction);
+    } catch (error) {
+        console.error('Error al crear transacción:', error);
+        res.status(500).json({ error: 'Error al crear transacción' });
+    }
+});
+
+// POST /api/funds/transfer - Crear transferencia entre fondos
+router.post('/transfer', authenticateToken, async (req, res) => {
+    try {
+        const { sourceFundId, targetFundId, amount, description } = req.body;
+        const userId = req.user.userId;
+
+        // Validaciones
+        if (!sourceFundId || !targetFundId || !amount || !description) {
+            return res.status(400).json({ 
+                error: 'Fondo origen, fondo destino, monto y descripción son requeridos' 
+            });
+        }
+
+        if (sourceFundId === targetFundId) {
+            return res.status(400).json({ 
+                error: 'No se puede transferir al mismo fondo' 
+            });
+        }
+
+        const transferAmount = parseFloat(amount);
+        if (transferAmount <= 0) {
+            return res.status(400).json({ 
+                error: 'El monto debe ser mayor a cero' 
+            });
+        }
+
+        // Verificar que ambos fondos existen
+        const [sourceFund, targetFund] = await Promise.all([
+            prisma.fund.findUnique({ where: { id: sourceFundId } }),
+            prisma.fund.findUnique({ where: { id: targetFundId } })
+        ]);
+
+        if (!sourceFund || !targetFund) {
+            return res.status(404).json({ 
+                error: 'Uno o ambos fondos no existen' 
+            });
+        }
+
+        // Verificar saldo suficiente
+        if (sourceFund.currentBalance < transferAmount) {
+            return res.status(400).json({ 
+                error: 'Saldo insuficiente en el fondo origen' 
+            });
+        }
+
+        // Realizar la transferencia en una transacción
+        const result = await prisma.$transaction(async (prisma) => {
+            // Crear transacción de salida (gasto) en fondo origen
+            const outgoingTransaction = await prisma.fundTransaction.create({
+                data: {
+                    fundId: sourceFundId,
+                    type: 'EXPENSE',
+                    amount: -transferAmount,
+                    description: `Transferencia a ${targetFund.name}: ${description}`,
+                    category: 'TRANSFER',
+                    performedBy: userId
+                }
+            });
+
+            // Crear transacción de entrada (ingreso) en fondo destino
+            const incomingTransaction = await prisma.fundTransaction.create({
+                data: {
+                    fundId: targetFundId,
+                    type: 'INCOME',
+                    amount: transferAmount,
+                    description: `Transferencia desde ${sourceFund.name}: ${description}`,
+                    category: 'TRANSFER',
+                    performedBy: userId
+                }
+            });
+
+            // Actualizar saldos
+            await prisma.fund.update({
+                where: { id: sourceFundId },
+                data: {
+                    currentBalance: sourceFund.currentBalance - transferAmount,
+                    totalExpenses: sourceFund.totalExpenses + transferAmount
+                }
+            });
+
+            await prisma.fund.update({
+                where: { id: targetFundId },
+                data: {
+                    currentBalance: targetFund.currentBalance + transferAmount,
+                    totalIncome: targetFund.totalIncome + transferAmount
+                }
+            });
+
+            return { outgoingTransaction, incomingTransaction };
+        });
+
+        res.status(201).json({
+            message: 'Transferencia realizada exitosamente',
+            transfer: {
+                sourceFund: { id: sourceFund.id, name: sourceFund.name },
+                targetFund: { id: targetFund.id, name: targetFund.name },
+                amount: transferAmount,
+                description,
+                transactions: result
+            }
+        });
+    } catch (error) {
+        console.error('Error al realizar transferencia:', error);
+        res.status(500).json({ error: 'Error al realizar transferencia' });
+    }
+});
+
 // ==========================================
 // RUTAS DE PRÉSTAMOS ENTRE FONDOS
 // ==========================================

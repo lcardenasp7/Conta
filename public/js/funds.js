@@ -643,3 +643,362 @@ function clearFundFilters() {
 window.initFunds = initFunds;
 window.loadFunds = loadFunds;
 window.showCreateFundModal = showCreateFundModal;
+// Vi
+ew fund details
+async function viewFund(fundId) {
+    try {
+        showLoading();
+        const fund = await api.getFund(fundId);
+        showFundModal(fund, 'view');
+    } catch (error) {
+        console.error('Error loading fund details:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Edit fund
+async function editFund(fundId) {
+    try {
+        showLoading();
+        const fund = await api.getFund(fundId);
+        showFundModal(fund, 'edit');
+    } catch (error) {
+        console.error('Error loading fund for editing:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// View fund transactions
+async function viewFundTransactions(fundId) {
+    try {
+        showLoading();
+        
+        // Find fund name
+        const fund = currentFunds.find(f => f.id === fundId);
+        const fundName = fund ? fund.name : 'Fondo';
+        
+        // Get transactions
+        const response = await api.getFundTransactions(fundId);
+        const transactions = response.transactions || [];
+        
+        // Show transactions modal
+        showFundTransactionsModal(fundId, fundName, transactions);
+        
+    } catch (error) {
+        console.error('Error loading fund transactions:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Add fund income
+function addFundIncome(fundId) {
+    const fund = currentFunds.find(f => f.id === fundId);
+    if (!fund) {
+        showNotification('Fondo no encontrado', 'error');
+        return;
+    }
+    
+    showFundTransactionModal(fundId, fund.name, 'income');
+}
+
+// Add fund expense
+function addFundExpense(fundId) {
+    const fund = currentFunds.find(f => f.id === fundId);
+    if (!fund) {
+        showNotification('Fondo no encontrado', 'error');
+        return;
+    }
+    
+    showFundTransactionModal(fundId, fund.name, 'expense');
+}
+
+// Show fund transactions modal
+function showFundTransactionsModal(fundId, fundName, transactions) {
+    const modalHTML = `
+        <div class="modal fade" id="fundTransactionsModal" tabindex="-1">
+            <div class="modal-dialog modal-xl">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Transacciones - ${fundName}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>Tipo</th>
+                                        <th>Descripción</th>
+                                        <th>Monto</th>
+                                        <th>Usuario</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${transactions.length === 0 ? 
+                                        '<tr><td colspan="5" class="text-center">No hay transacciones</td></tr>' :
+                                        transactions.map(transaction => `
+                                            <tr>
+                                                <td>${formatDate(transaction.createdAt)}</td>
+                                                <td>
+                                                    <span class="badge ${transaction.type === 'INCOME' ? 'bg-success' : 'bg-danger'}">
+                                                        ${transaction.type === 'INCOME' ? 'Ingreso' : 'Gasto'}
+                                                    </span>
+                                                </td>
+                                                <td>${transaction.description}</td>
+                                                <td class="${transaction.type === 'INCOME' ? 'text-success' : 'text-danger'}">
+                                                    ${transaction.type === 'INCOME' ? '+' : '-'}${formatCurrency(Math.abs(transaction.amount))}
+                                                </td>
+                                                <td>${transaction.user?.name || 'Sistema'}</td>
+                                            </tr>
+                                        `).join('')
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('fundTransactionsModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('fundTransactionsModal'));
+    modal.show();
+    
+    // Clean up when modal is hidden
+    document.getElementById('fundTransactionsModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Show fund transaction modal (for adding income/expense)
+function showFundTransactionModal(fundId, fundName, type) {
+    const isIncome = type === 'income';
+    const modalTitle = isIncome ? 'Agregar Ingreso' : 'Agregar Gasto';
+    const buttonClass = isIncome ? 'btn-success' : 'btn-danger';
+    const buttonText = isIncome ? 'Agregar Ingreso' : 'Agregar Gasto';
+    
+    const modalHTML = `
+        <div class="modal fade" id="fundTransactionModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">${modalTitle} - ${fundName}</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <form id="fundTransactionForm">
+                            <input type="hidden" id="transactionFundId" value="${fundId}">
+                            <input type="hidden" id="transactionType" value="${type}">
+                            
+                            <div class="mb-3">
+                                <label for="transactionAmount" class="form-label">Monto *</label>
+                                <input type="number" class="form-control" id="transactionAmount" min="0.01" step="0.01" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="transactionDescription" class="form-label">Descripción *</label>
+                                <textarea class="form-control" id="transactionDescription" rows="3" required></textarea>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="transactionCategory" class="form-label">Categoría</label>
+                                <select class="form-select" id="transactionCategory">
+                                    <option value="">Seleccionar categoría</option>
+                                    ${isIncome ? `
+                                        <option value="TUITION">Matrícula</option>
+                                        <option value="MONTHLY">Mensualidad</option>
+                                        <option value="EVENT">Evento</option>
+                                        <option value="DONATION">Donación</option>
+                                        <option value="OTHER">Otros</option>
+                                    ` : `
+                                        <option value="SUPPLIES">Suministros</option>
+                                        <option value="MAINTENANCE">Mantenimiento</option>
+                                        <option value="SERVICES">Servicios</option>
+                                        <option value="EQUIPMENT">Equipos</option>
+                                        <option value="OTHER">Otros</option>
+                                    `}
+                                </select>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn ${buttonClass}" onclick="saveFundTransaction()">${buttonText}</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('fundTransactionModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('fundTransactionModal'));
+    modal.show();
+    
+    // Clean up when modal is hidden
+    document.getElementById('fundTransactionModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Save fund transaction
+async function saveFundTransaction() {
+    const form = document.getElementById('fundTransactionForm');
+    if (!form || !validateForm(form)) {
+        showNotification('Por favor complete todos los campos requeridos', 'error');
+        return;
+    }
+    
+    const fundId = document.getElementById('transactionFundId').value;
+    const type = document.getElementById('transactionType').value;
+    const amount = parseFloat(document.getElementById('transactionAmount').value);
+    const description = document.getElementById('transactionDescription').value;
+    const category = document.getElementById('transactionCategory').value;
+    
+    const transactionData = {
+        fundId,
+        type: type === 'income' ? 'INCOME' : 'EXPENSE',
+        amount: type === 'income' ? amount : -amount,
+        description,
+        category: category || 'OTHER'
+    };
+    
+    try {
+        showLoading();
+        
+        await api.createFundTransaction(transactionData);
+        
+        const actionText = type === 'income' ? 'Ingreso agregado' : 'Gasto agregado';
+        showNotification(`${actionText} exitosamente`, 'success');
+        
+        // Close modal and reload data
+        const modal = bootstrap.Modal.getInstance(document.getElementById('fundTransactionModal'));
+        modal.hide();
+        
+        loadFunds(currentFundsPage, currentFundsFilters);
+        
+    } catch (error) {
+        console.error('Error saving fund transaction:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Show transfer modal
+function showTransferModal() {
+    const modal = document.getElementById('transferModal');
+    if (!modal) return;
+    
+    // Populate fund selectors
+    const sourceFundSelect = document.getElementById('sourceFund');
+    const targetFundSelect = document.getElementById('targetFund');
+    
+    if (sourceFundSelect && targetFundSelect) {
+        const activeFunds = currentFunds.filter(fund => fund.isActive);
+        const fundOptions = activeFunds.map(fund => 
+            `<option value="${fund.id}">${fund.name} (${fund.code}) - ${formatCurrency(fund.currentBalance)}</option>`
+        ).join('');
+        
+        sourceFundSelect.innerHTML = '<option value="">Seleccionar fondo origen</option>' + fundOptions;
+        targetFundSelect.innerHTML = '<option value="">Seleccionar fondo destino</option>' + fundOptions;
+    }
+    
+    // Show modal
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+}
+
+// Process transfer
+async function processTransfer() {
+    const form = document.getElementById('transferForm');
+    if (!form || !validateForm(form)) {
+        showNotification('Por favor complete todos los campos requeridos', 'error');
+        return;
+    }
+    
+    const sourceFundId = document.getElementById('sourceFund').value;
+    const targetFundId = document.getElementById('targetFund').value;
+    const amount = parseFloat(document.getElementById('transferAmount').value);
+    const description = document.getElementById('transferDescription').value;
+    
+    if (sourceFundId === targetFundId) {
+        showNotification('No se puede transferir a el mismo fondo', 'error');
+        return;
+    }
+    
+    const transferData = {
+        sourceFundId,
+        targetFundId,
+        amount,
+        description
+    };
+    
+    try {
+        showLoading();
+        
+        await api.createFundTransfer(transferData);
+        showNotification('Transferencia realizada exitosamente', 'success');
+        
+        // Close modal and reload data
+        const modal = bootstrap.Modal.getInstance(document.getElementById('transferModal'));
+        modal.hide();
+        
+        loadFunds(currentFundsPage, currentFundsFilters);
+        
+    } catch (error) {
+        console.error('Error processing transfer:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Show fund statistics modal
+function showFundStatsModal() {
+    showNotification('Función de estadísticas en desarrollo', 'info');
+}
+
+// Export funds
+function exportFunds() {
+    showNotification('Función de exportación en desarrollo', 'info');
+}
+
+// Export functions for global access
+window.viewFund = viewFund;
+window.editFund = editFund;
+window.viewFundTransactions = viewFundTransactions;
+window.addFundIncome = addFundIncome;
+window.addFundExpense = addFundExpense;
+window.showTransferModal = showTransferModal;
+window.processTransfer = processTransfer;
+window.showFundStatsModal = showFundStatsModal;
+window.exportFunds = exportFunds;

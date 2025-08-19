@@ -8,18 +8,18 @@ let dashboardUpdateInterval = null;
 async function loadDashboard() {
     try {
         showLoading(true);
-        
+
         // Load dashboard statistics
         const stats = await api.getDashboardStats();
         updateDashboardStats(stats);
-        
+
         // Load recent activities
         const activities = await api.getDashboardActivities();
         updateRecentActivities(activities);
-        
+
         // Load charts
         await loadDashboardCharts();
-        
+
     } catch (error) {
         console.error('Error loading dashboard:', error);
         handleApiError(error);
@@ -31,7 +31,7 @@ async function loadDashboard() {
 // Update dashboard statistics
 function updateDashboardStats(stats) {
     if (!stats) return;
-    
+
     // Estadísticas principales
     const summary = stats.summary || {};
     const income = stats.income || {};
@@ -39,25 +39,25 @@ function updateDashboardStats(stats) {
     const balance = stats.balance || {};
     const debts = stats.debts || {};
     const metrics = stats.metrics || {};
-    
+
     // Actualizar tarjetas principales
     updateStatCard('totalStudents', summary.activeStudents, summary.totalStudents);
     updateStatCard('monthlyIncome', formatCurrency(income.thisMonth), 'Este mes');
     updateStatCard('monthlyExpenses', formatCurrency(expenses.thisMonth), 'Este mes');
-    updateStatCard('monthlyBalance', formatCurrency(balance.thisMonth), 
+    updateStatCard('monthlyBalance', formatCurrency(balance.thisMonth),
         balance.thisMonth >= 0 ? 'Positivo' : 'Negativo');
     updateStatCard('pendingInvoices', summary.pendingInvoices, `${summary.overdueInvoices} vencidas`);
     updateStatCard('activeEvents', summary.activeEvents, `${summary.totalEvents} total`);
-    
+
     // Actualizar métricas adicionales
     updateMetricCard('studentActivePercentage', metrics.studentActivePercentage, '%');
     updateMetricCard('invoicePaidPercentage', metrics.invoicePaidPercentage, '%');
     updateMetricCard('totalDebtAmount', formatCurrency(debts.totalAmount), `${debts.totalDebtors} deudores`);
     updateMetricCard('averageDebtPerStudent', formatCurrency(metrics.averageDebtPerStudent), 'Promedio');
-    
+
     // Actualizar ingresos y egresos detallados
     updateFinancialDetails(income, expenses, balance);
-    
+
     // Actualizar categorías
     updateIncomeCategories(income.categories || []);
     updateExpenseCategories(expenses.categories || []);
@@ -68,7 +68,7 @@ function updateStatCard(elementId, mainValue, subValue) {
     const element = document.getElementById(elementId);
     if (element) {
         element.textContent = mainValue || 0;
-        
+
         // Actualizar subtexto si existe
         const subElement = element.parentElement.querySelector('.text-muted');
         if (subElement && subValue) {
@@ -91,7 +91,7 @@ function updateFinancialDetails(income, expenses, balance) {
     const yearIncomeElement = document.getElementById('yearIncome');
     const yearExpensesElement = document.getElementById('yearExpenses');
     const yearBalanceElement = document.getElementById('yearBalance');
-    
+
     if (todayIncomeElement) todayIncomeElement.textContent = formatCurrency(income.today || 0);
     if (yearIncomeElement) yearIncomeElement.textContent = formatCurrency(income.thisYear || 0);
     if (yearExpensesElement) yearExpensesElement.textContent = formatCurrency(expenses.thisYear || 0);
@@ -105,12 +105,12 @@ function updateFinancialDetails(income, expenses, balance) {
 function updateIncomeCategories(categories) {
     const container = document.getElementById('incomeCategories');
     if (!container) return;
-    
+
     if (categories.length === 0) {
         container.innerHTML = '<p class="text-muted">No hay ingresos este mes</p>';
         return;
     }
-    
+
     container.innerHTML = categories.map(category => `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="d-flex align-items-center">
@@ -126,12 +126,12 @@ function updateIncomeCategories(categories) {
 function updateExpenseCategories(categories) {
     const container = document.getElementById('expenseCategories');
     if (!container) return;
-    
+
     if (categories.length === 0) {
         container.innerHTML = '<p class="text-muted">No hay gastos este mes</p>';
         return;
     }
-    
+
     container.innerHTML = categories.map(category => `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="d-flex align-items-center">
@@ -146,7 +146,7 @@ function updateExpenseCategories(categories) {
 // Actualizar actividades recientes
 function updateRecentActivities(activities) {
     if (!activities) return;
-    
+
     updateRecentPayments(activities.recentPayments || []);
     updateRecentInvoices(activities.recentInvoices || []);
     updateUpcomingEvents(activities.upcomingEvents || []);
@@ -156,12 +156,12 @@ function updateRecentActivities(activities) {
 function updateRecentPayments(payments) {
     const container = document.getElementById('recentPayments');
     if (!container) return;
-    
+
     if (payments.length === 0) {
         container.innerHTML = '<p class="text-muted">No hay pagos recientes</p>';
         return;
     }
-    
+
     container.innerHTML = payments.map(payment => `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
@@ -182,12 +182,12 @@ function updateRecentPayments(payments) {
 function updateRecentInvoices(invoices) {
     const container = document.getElementById('recentInvoices');
     if (!container) return;
-    
+
     if (invoices.length === 0) {
         container.innerHTML = '<p class="text-muted">No hay facturas recientes</p>';
         return;
     }
-    
+
     container.innerHTML = invoices.map(invoice => `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
@@ -208,12 +208,12 @@ function updateRecentInvoices(invoices) {
 function updateUpcomingEvents(events) {
     const container = document.getElementById('upcomingEvents');
     if (!container) return;
-    
+
     if (events.length === 0) {
         container.innerHTML = '<p class="text-muted">No hay eventos próximos</p>';
         return;
     }
-    
+
     container.innerHTML = events.map(event => `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div>
@@ -278,10 +278,10 @@ async function loadDashboardCharts() {
     try {
         // Load income vs expense chart
         await loadIncomeExpenseChart();
-        
+
         // Load income distribution chart
         await loadIncomeDistributionChart();
-        
+
     } catch (error) {
         console.error('Error loading charts:', error);
     }
@@ -291,17 +291,17 @@ async function loadDashboardCharts() {
 async function loadIncomeExpenseChart() {
     const ctx = document.getElementById('incomeExpenseChart');
     if (!ctx) return;
-    
+
     // Destroy existing chart
     if (incomeExpenseChart) {
         incomeExpenseChart.destroy();
     }
-    
+
     try {
         // Try to get real data from API
         const response = await api.getDashboardChartData('monthly-income-expense');
         const chartData = response;
-        
+
         const data = {
             labels: chartData.labels,
             datasets: [
@@ -325,7 +325,7 @@ async function loadIncomeExpenseChart() {
                 }
             ]
         };
-        
+
         incomeExpenseChart = new Chart(ctx, {
             type: 'line',
             data: data,
@@ -345,7 +345,7 @@ async function loadIncomeExpenseChart() {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            callback: function(value) {
+                            callback: function (value) {
                                 return formatCurrency(value);
                             }
                         }
@@ -366,6 +366,12 @@ async function loadIncomeExpenseChart() {
 
 // Fallback chart with sample data
 function loadSampleIncomeExpenseChart(ctx) {
+    // Destroy existing chart if it exists
+    if (incomeExpenseChart) {
+        incomeExpenseChart.destroy();
+        incomeExpenseChart = null;
+    }
+    
     const data = {
         labels: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio'],
         datasets: [
@@ -389,7 +395,7 @@ function loadSampleIncomeExpenseChart(ctx) {
             }
         ]
     };
-    
+
     incomeExpenseChart = new Chart(ctx, {
         type: 'line',
         data: data,
@@ -409,7 +415,7 @@ function loadSampleIncomeExpenseChart(ctx) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        callback: function(value) {
+                        callback: function (value) {
                             return formatCurrency(value);
                         }
                     }
@@ -427,23 +433,23 @@ function loadSampleIncomeExpenseChart(ctx) {
 async function loadIncomeDistributionChart() {
     const ctx = document.getElementById('incomeDistributionChart');
     if (!ctx) return;
-    
+
     // Destroy existing chart
     if (incomeDistributionChart) {
         incomeDistributionChart.destroy();
     }
-    
+
     try {
         // Get current dashboard stats to use income categories
         const stats = await api.getDashboardStats();
         const categories = stats.income?.categories || [];
-        
+
         if (categories.length === 0) {
             // Show empty state
             ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
             return;
         }
-        
+
         const data = {
             labels: categories.map(cat => cat.name),
             datasets: [{
@@ -453,7 +459,7 @@ async function loadIncomeDistributionChart() {
                 borderWidth: 2
             }]
         };
-        
+
         incomeDistributionChart = new Chart(ctx, {
             type: 'doughnut',
             data: data,
@@ -470,7 +476,7 @@ async function loadIncomeDistributionChart() {
                     },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
+                            label: function (context) {
                                 const label = context.label || '';
                                 const value = formatCurrency(context.parsed);
                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
@@ -512,7 +518,7 @@ function loadSampleIncomeDistributionChart(ctx) {
             borderWidth: 2
         }]
     };
-    
+
     incomeDistributionChart = new Chart(ctx, {
         type: 'doughnut',
         data: data,
@@ -566,9 +572,9 @@ async function loadRecentTransactions() {
                 status: 'PENDING'
             }
         ];
-        
+
         updateRecentTransactions(transactions);
-        
+
     } catch (error) {
         console.error('Error loading recent transactions:', error);
     }
@@ -578,12 +584,12 @@ async function loadRecentTransactions() {
 function updateRecentTransactions(transactions) {
     const tbody = document.getElementById('recentTransactions');
     if (!tbody) return;
-    
+
     if (transactions.length === 0) {
         tbody.innerHTML = '<tr><td colspan="5" class="text-center">No hay transacciones recientes</td></tr>';
         return;
     }
-    
+
     tbody.innerHTML = transactions.map(transaction => `
         <tr>
             <td>${formatDate(transaction.date)}</td>
@@ -622,22 +628,22 @@ function exportDashboardData() {
 function initDashboard() {
     // Load dashboard data when page loads
     loadDashboard();
-    
+
     // Setup refresh button if exists
     const refreshBtn = document.getElementById('refreshDashboard');
     if (refreshBtn) {
         refreshBtn.addEventListener('click', refreshDashboard);
     }
-    
+
     // Setup export button if exists
     const exportBtn = document.getElementById('exportDashboard');
     if (exportBtn) {
         exportBtn.addEventListener('click', exportDashboardData);
     }
-    
+
     // Auto-refresh every 5 minutes
     dashboardUpdateInterval = setInterval(() => {
-        if (document.getElementById('dashboard-content') && 
+        if (document.getElementById('dashboard-content') &&
             !document.getElementById('dashboard-content').classList.contains('d-none')) {
             loadDashboard();
         }
@@ -647,7 +653,7 @@ function initDashboard() {
 // Real-time dashboard updates
 function updateDashboardRealTime() {
     // Only update if dashboard is visible
-    if (document.getElementById('dashboard-content') && 
+    if (document.getElementById('dashboard-content') &&
         !document.getElementById('dashboard-content').classList.contains('d-none')) {
         loadDashboard();
     }
@@ -656,10 +662,10 @@ function updateDashboardRealTime() {
 // Trigger dashboard update after payment
 function notifyPaymentMade(paymentData) {
     console.log('💰 Payment notification received:', paymentData);
-    
+
     // Update dashboard immediately
     updateDashboardRealTime();
-    
+
     // Show notification
     if (typeof showSuccess === 'function') {
         showSuccess(`Pago registrado: $${formatCurrency(paymentData.amount)}`);
@@ -669,10 +675,10 @@ function notifyPaymentMade(paymentData) {
 // Trigger dashboard update after invoice generation
 function notifyInvoiceGenerated(invoiceData) {
     console.log('📄 Invoice notification received:', invoiceData);
-    
+
     // Update dashboard immediately
     updateDashboardRealTime();
-    
+
     // Show notification
     if (typeof showSuccess === 'function') {
         showSuccess(`Factura generada: ${invoiceData.invoiceNumber}`);
@@ -725,10 +731,10 @@ function getExpenseCategoryText(concept) {
 // Trigger dashboard update after expense (incoming invoice)
 function notifyExpenseRecorded(expenseData) {
     console.log('💸 Expense notification received:', expenseData);
-    
+
     // Update dashboard immediately
     updateDashboardRealTime();
-    
+
     // Show notification with category information
     const categoryText = getExpenseCategoryText(expenseData.concept || 'OTHER');
     if (typeof showSuccess === 'function') {

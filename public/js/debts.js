@@ -389,13 +389,22 @@ async function saveDebtPayment() {
         amount: Math.round(parseFloat(amount) * 100) / 100, // Redondear a 2 decimales
         method: method,
         reference: document.getElementById('debtPaymentReference').value?.trim() || null,
-        observations: document.getElementById('debtPaymentObservations').value?.trim() || null
+        observations: document.getElementById('debtPaymentObservations').value?.trim() || null,
+        date: document.getElementById('debtPaymentDate').value || new Date().toISOString().split('T')[0]
     };
     
-    // CORREGIR: Solo agregar studentId si existe y no está vacío
-    const studentId = document.getElementById('debtStudentId').value;
+    // CORREGIR: Manejar studentId correctamente
+    const studentIdElement = document.getElementById('debtStudentId');
+    const studentId = studentIdElement ? studentIdElement.value : null;
+    
+    // Solo agregar studentId si existe y es válido
     if (studentId && studentId !== '' && studentId !== 'undefined' && studentId !== 'null') {
         paymentData.studentId = studentId;
+        console.log('✅ Student ID found:', studentId);
+    } else {
+        // Para facturas externas, no se requiere studentId
+        console.log('⚠️ No student ID - assuming external invoice');
+        paymentData.studentId = null;
     }
     
     // Validación adicional del monto
@@ -419,7 +428,8 @@ async function saveDebtPayment() {
         console.log('- Amount:', paymentData.amount, typeof paymentData.amount);
         console.log('- Method:', paymentData.method, typeof paymentData.method);
         
-        // Crear el pago con manejo de errores mejorado
+                // Crear el pago con manejo de errores mejorado
+        console.log('📤 Sending payment data to API:', paymentData);
         const result = await api.createPayment(paymentData);
         
         console.log('✅ Payment created successfully:', result);

@@ -1,0 +1,33 @@
+# Archivos que Railway debe ignorar
+.env
+.env.local
+.env.development
+.env.test
+*.log
+debug.log
+error.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Archivos temporales
+*.tmp
+temp/
+.DS_Store
+Thumbs.db
+
+# Scripts de desarrollo y prueba
+scripts/create-sample-*.js
+scripts/test-*.js
+scripts/debug-*.js
+scripts/*-test.js
+
+# Documentación de desarrollo
+DEBUG_*.md
+TEST_*.md
+DESARROLLO_*.md
+
+# Archivos de backup
+*.backup
+*.bak
+*.old

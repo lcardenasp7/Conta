@@ -8,11 +8,45 @@ const prisma = new PrismaClient();
 
 // Validation rules - CORREGIDAS para facturas externas
 const validatePayment = [
-  body('studentId').optional().isUUID().withMessage('ID de estudiante inválido'),
+  body('studentId')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') {
+        return true; // Permitir valores vacíos para facturas externas
+      }
+      // Si tiene valor, debe ser un UUID válido
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(value)) {
+        throw new Error('ID de estudiante inválido');
+      }
+      return true;
+    }),
   body('amount').isFloat({ min: 0.01 }).withMessage('Monto debe ser mayor a 0'),
   body('method').isIn(['CASH', 'BANK_TRANSFER', 'CARD', 'CHECK', 'OTHER']).withMessage('Método de pago inválido'),
-  body('invoiceId').optional().isUUID().withMessage('ID de factura inválido'),
-  body('eventId').optional().isUUID().withMessage('ID de evento inválido')
+  body('invoiceId')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') {
+        return true;
+      }
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(value)) {
+        throw new Error('ID de factura inválido');
+      }
+      return true;
+    }),
+  body('eventId')
+    .optional({ nullable: true, checkFalsy: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') {
+        return true;
+      }
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(value)) {
+        throw new Error('ID de evento inválido');
+      }
+      return true;
+    })
 ];
 
 // Get all payments with filters and pagination

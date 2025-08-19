@@ -63,24 +63,33 @@ async function main() {
 
     // 3. Create Grades
     const grades = [
-        { name: 'Preescolar', level: 'PREESCOLAR', order: 0 },
-        { name: 'Primero', level: 'PRIMARIA', order: 1 },
-        { name: 'Segundo', level: 'PRIMARIA', order: 2 },
-        { name: 'Tercero', level: 'PRIMARIA', order: 3 },
-        { name: 'Cuarto', level: 'PRIMARIA', order: 4 },
-        { name: 'Quinto', level: 'PRIMARIA', order: 5 },
-        { name: 'Sexto', level: 'SECUNDARIA', order: 6 },
-        { name: 'Séptimo', level: 'SECUNDARIA', order: 7 },
-        { name: 'Octavo', level: 'SECUNDARIA', order: 8 },
-        { name: 'Noveno', level: 'SECUNDARIA', order: 9 },
-        { name: 'Décimo', level: 'MEDIA', order: 10 },
-        { name: 'Undécimo', level: 'MEDIA', order: 11 }
+        { name: 'Jardín', level: 'PREESCOLAR', order: 0 },
+        { name: 'Transición', level: 'PREESCOLAR', order: 1 },
+        { name: 'Primero', level: 'PRIMARIA', order: 2 },
+        { name: 'Segundo', level: 'PRIMARIA', order: 3 },
+        { name: 'Tercero', level: 'PRIMARIA', order: 4 },
+        { name: 'Cuarto', level: 'PRIMARIA', order: 5 },
+        { name: 'Quinto', level: 'PRIMARIA', order: 6 },
+        { name: 'Sexto', level: 'SECUNDARIA', order: 7 },
+        { name: 'Séptimo', level: 'SECUNDARIA', order: 8 },
+        { name: 'Octavo', level: 'SECUNDARIA', order: 9 },
+        { name: 'Noveno', level: 'SECUNDARIA', order: 10 },
+        { name: 'Décimo', level: 'MEDIA', order: 11 },
+        { name: 'Undécimo', level: 'MEDIA', order: 12 },
+        { name: 'Brújula', level: 'OTRO', order: 13 },
+        { name: 'Aceleración', level: 'OTRO', order: 14 },
+        { name: 'Ciclo 3', level: 'CICLO', order: 15 },
+        { name: 'Ciclo 4', level: 'CICLO', order: 16 },
+        { name: 'Ciclo 5', level: 'CICLO', order: 17 },
+        { name: 'Ciclo 6', level: 'CICLO', order: 18 }
     ];
 
+    const createdGrades = [];
     for (const gradeData of grades) {
         const grade = await prisma.grade.create({
             data: gradeData
         });
+        createdGrades.push(grade);
 
         // Create groups for each grade with numeric format
         const groups = ['01', '02', '03', '04', '05', '06'];
@@ -221,21 +230,326 @@ async function main() {
 
     console.log('✅ Chart of accounts created');
 
-    // 5. Create Academic Year (commented out - model doesn't exist yet)
-    // const currentYear = new Date().getFullYear();
-    // const academicYear = await prisma.academicYear.upsert({
-    //     where: { year: currentYear },
-    //     update: {},
-    //     create: {
-    //         year: currentYear,
-    //         startDate: new Date(`${currentYear}-02-01`),
-    //         endDate: new Date(`${currentYear}-11-30`),
-    //         isActive: true
-    //     }
-    // });
-    // console.log('✅ Academic year created:', academicYear.year);
+    // ==========================================
+    // 🆕 NUEVO: SISTEMA DE FONDOS
+    // ==========================================
 
-    console.log('🎉 Database seeded successfully!');
+    // 5. Create Fund System
+    const currentYear = new Date().getFullYear();
+
+    // Crear fondos principales
+    const fundsData = [
+        {
+            name: `Matrículas ${currentYear}`,
+            code: `MAT${currentYear}`,
+            type: 'TUITION',
+            description: `Fondos generados por matrículas del año académico ${currentYear}`,
+            academicYear: currentYear
+        },
+        {
+            name: `Mensualidades ${currentYear}`,
+            code: `MEN${currentYear}`,
+            type: 'MONTHLY_FEES',
+            description: `Fondos generados por mensualidades del año académico ${currentYear}`,
+            academicYear: currentYear
+        },
+        {
+            name: `Eventos Escolares ${currentYear}`,
+            code: `EVE${currentYear}`,
+            type: 'EVENTS',
+            description: 'Fondos generados por eventos escolares (rifas, bingos, festivales)',
+            academicYear: currentYear
+        },
+        {
+            name: `Fondo Operacional ${currentYear}`,
+            code: `OPE${currentYear}`,
+            type: 'OPERATIONAL',
+            description: 'Fondo para gastos operacionales de la institución',
+            academicYear: currentYear
+        },
+        {
+            name: 'Fondo de Emergencia',
+            code: `EME${currentYear}`,
+            type: 'EMERGENCY',
+            description: 'Fondo de reserva para situaciones de emergencia',
+            academicYear: currentYear
+        },
+        {
+            name: `Fondos Externos ${currentYear}`,
+            code: `EXT${currentYear}`,
+            type: 'EXTERNAL',
+            description: 'Fondos provenientes de donaciones y aportes externos',
+            academicYear: currentYear
+        }
+    ];
+
+    const createdFunds = [];
+    for (const fundData of fundsData) {
+        const fund = await prisma.fund.create({
+            data: fundData
+        });
+        createdFunds.push(fund);
+        console.log(`✅ Fund created: ${fund.name}`);
+    }
+
+    // 6. Create sample students (30 students for testing)
+    const allGroups = await prisma.group.findMany({
+        include: { grade: true }
+    });
+
+    const sampleStudents = [];
+    let studentCounter = 1;
+
+    // Crear 30 estudiantes distribuidos en diferentes grados
+    for (let i = 0; i < 30; i++) {
+        const randomGroup = allGroups[Math.floor(Math.random() * allGroups.length)];
+        
+        const student = await prisma.student.create({
+            data: {
+                documentType: 'TI',
+                document: `${1000000000 + studentCounter}`,
+                firstName: `Estudiante${studentCounter}`,
+                lastName: `Apellido${studentCounter}`,
+                birthDate: new Date(2010 + Math.floor(Math.random() * 5), 
+                                  Math.floor(Math.random() * 12), 
+                                  Math.floor(Math.random() * 28) + 1),
+                gender: studentCounter % 2 === 0 ? 'M' : 'F',
+                email: `estudiante${studentCounter}@villasanpablo.edu.co`,
+                phone: `300${String(studentCounter).padStart(7, '0')}`,
+                address: `Dirección ${studentCounter}, Villas de San Pablo`,
+                gradeId: randomGroup.gradeId,
+                groupId: randomGroup.id,
+                guardianName: `Acudiente ${studentCounter}`,
+                guardianPhone: `310${String(studentCounter).padStart(7, '0')}`,
+                status: 'ACTIVE',
+                enrollmentDate: new Date(`${currentYear}-02-01`)
+            }
+        });
+        
+        sampleStudents.push(student);
+        studentCounter++;
+    }
+    console.log(`✅ Created ${sampleStudents.length} sample students`);
+
+    // 7. Create sample events
+    const eventsData = [
+        {
+            name: 'Gran Rifa Navideña 2024',
+            type: 'RAFFLE',
+            description: 'Rifa benéfica para recaudar fondos para mejoras en la institución',
+            eventDate: new Date(`${currentYear}-12-15T14:00:00`),
+            location: 'Patio Principal',
+            ticketPrice: 5000,
+            fundraisingGoal: 2000000,
+            responsible: 'Coordinador de Eventos',
+            responsibleId: rector.id,
+            status: 'PLANNING',
+            assignmentType: 'BY_GRADE'
+        },
+        {
+            name: 'Bingo Familiar',
+            type: 'BINGO',
+            description: 'Noche de bingo familiar para recaudar fondos',
+            eventDate: new Date(`${currentYear}-09-20T18:00:00`),
+            location: 'Salón de Actos',
+            ticketPrice: 3000,
+            fundraisingGoal: 1500000,
+            responsible: 'Coordinador de Eventos',
+            responsibleId: auxiliary.id,
+            status: 'ACTIVE',
+            assignmentType: 'MIXED'
+        },
+        {
+            name: 'Festival Cultural Villas de San Pablo',
+            type: 'CULTURAL',
+            description: 'Festival anual de cultura y artes',
+            eventDate: new Date(`${currentYear}-10-31T09:00:00`),
+            location: 'Todas las instalaciones',
+            ticketPrice: 0,
+            fundraisingGoal: 500000,
+            responsible: 'Coordinador Cultural',
+            responsibleId: rector.id,
+            status: 'PLANNING',
+            assignmentType: 'BY_GRADE'
+        }
+    ];
+
+    const eventsFund = createdFunds.find(f => f.type === 'EVENTS');
+    
+    for (const eventData of eventsData) {
+        const event = await prisma.event.create({
+            data: {
+                ...eventData,
+                fundId: eventsFund.id
+            }
+        });
+        console.log(`✅ Event created: ${event.name}`);
+    }
+
+    // 8. Create sample financial transactions to populate funds
+    
+    // Simular algunos pagos de matrícula
+    const matriculasFund = createdFunds.find(f => f.type === 'TUITION');
+    const matriculaAmount = 150000;
+    let totalMatriculas = 0;
+
+    for (let i = 0; i < 20; i++) {
+        const student = sampleStudents[i];
+        
+        // Crear factura de matrícula
+        const invoice = await prisma.invoice.create({
+            data: {
+                invoiceNumber: `MAT-${currentYear}-${String(i + 1).padStart(6, '0')}`,
+                date: new Date(`${currentYear}-02-01`),
+                dueDate: new Date(`${currentYear}-02-15`),
+                studentId: student.id,
+                concept: 'TUITION',
+                subtotal: matriculaAmount,
+                tax: 0,
+                total: matriculaAmount,
+                status: 'PAID',
+                userId: auxiliary.id,
+                type: 'OUTGOING'
+            }
+        });
+
+        // Crear items de la factura
+        await prisma.invoiceItem.create({
+            data: {
+                invoiceId: invoice.id,
+                description: `Matrícula ${currentYear} - ${student.firstName} ${student.lastName}`,
+                quantity: 1,
+                unitPrice: matriculaAmount,
+                total: matriculaAmount
+            }
+        });
+
+        // Crear pago
+        const payment = await prisma.payment.create({
+            data: {
+                paymentNumber: `PAG-${currentYear}-${String(i + 1).padStart(6, '0')}`,
+                date: new Date(`${currentYear}-02-05`),
+                studentId: student.id,
+                invoiceId: invoice.id,
+                amount: matriculaAmount,
+                method: 'BANK_TRANSFER',
+                reference: `Transfer-${i + 1}`,
+                userId: auxiliary.id,
+                status: 'COMPLETED',
+                fundTargetId: matriculasFund.id
+            }
+        });
+
+        // Crear transacción de fondo
+        await prisma.fundTransaction.create({
+            data: {
+                fundId: matriculasFund.id,
+                type: 'INCOME',
+                amount: matriculaAmount,
+                description: `Matrícula ${currentYear} - ${student.firstName} ${student.lastName}`,
+                paymentId: payment.id,
+                userId: auxiliary.id,
+                performedBy: auxiliary.id,
+                balanceAfter: (i + 1) * matriculaAmount,
+                isApproved: true
+            }
+        });
+
+        totalMatriculas += matriculaAmount;
+    }
+
+    // Actualizar saldo del fondo de matrículas
+    await prisma.fund.update({
+        where: { id: matriculasFund.id },
+        data: {
+            currentBalance: totalMatriculas,
+            totalIncome: totalMatriculas,
+            balance: totalMatriculas
+        }
+    });
+
+    console.log(`✅ Created sample financial data - Matrículas: $${totalMatriculas.toLocaleString()}`);
+
+    // Crear una transferencia de ejemplo entre fondos
+    const operationalFund = createdFunds.find(f => f.type === 'OPERATIONAL');
+    const transferAmount = 500000;
+
+    // Transacción de salida del fondo de matrículas
+    await prisma.fundTransaction.create({
+        data: {
+            fundId: matriculasFund.id,
+            type: 'TRANSFER_OUT',
+            amount: transferAmount,
+            description: 'Transferencia para gastos operacionales',
+            sourceFundId: matriculasFund.id,
+            targetFundId: operationalFund.id,
+            userId: rector.id,
+            performedBy: rector.id,
+            balanceAfter: totalMatriculas - transferAmount,
+            isApproved: true
+        }
+    });
+
+    // Transacción de entrada al fondo operacional
+    await prisma.fundTransaction.create({
+        data: {
+            fundId: operationalFund.id,
+            type: 'TRANSFER_IN',
+            amount: transferAmount,
+            description: 'Transferencia desde fondo de matrículas',
+            sourceFundId: matriculasFund.id,
+            targetFundId: operationalFund.id,
+            userId: rector.id,
+            performedBy: rector.id,
+            balanceAfter: transferAmount,
+            isApproved: true
+        }
+    });
+
+    // Actualizar saldos
+    await prisma.fund.update({
+        where: { id: matriculasFund.id },
+        data: {
+            currentBalance: totalMatriculas - transferAmount,
+            totalExpenses: transferAmount,
+            balance: totalMatriculas - transferAmount
+        }
+    });
+
+    await prisma.fund.update({
+        where: { id: operationalFund.id },
+        data: {
+            currentBalance: transferAmount,
+            totalIncome: transferAmount,
+            balance: transferAmount
+        }
+    });
+
+    console.log(`✅ Created sample fund transfer: $${transferAmount.toLocaleString()}`);
+
+    // Mostrar resumen final
+    console.log('\n🎉 Database seeded successfully with Fund System!');
+    console.log('\n📊 RESUMEN DEL SISTEMA DE FONDOS:');
+    
+    const fundsSummary = await prisma.fund.findMany({
+        select: {
+            name: true,
+            code: true,
+            type: true,
+            currentBalance: true,
+            totalIncome: true,
+            totalExpenses: true
+        }
+    });
+
+    fundsSummary.forEach(fund => {
+        console.log(`💰 ${fund.name} (${fund.code}): $${fund.currentBalance.toLocaleString()}`);
+        console.log(`   Ingresos: $${fund.totalIncome.toLocaleString()} | Gastos: $${fund.totalExpenses.toLocaleString()}`);
+    });
+
+    console.log(`\n👥 Total Students: ${sampleStudents.length}`);
+    console.log(`📅 Total Events: ${eventsData.length}`);
+    console.log(`💼 Total Funds: ${createdFunds.length}`);
 }
 
 main()

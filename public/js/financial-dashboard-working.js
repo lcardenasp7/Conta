@@ -204,8 +204,8 @@ async function loadFinancialOverview() {
         renderFinancialSummary(response.summary, response.period);
         
         console.log('🔄 Renderizando gráficos...');
-        renderIncomeChart(response.income.byCategory);
-        renderExpenseChart(response.expenses.byCategory);
+        renderIncomeChart(response.incomeByCategory);
+        renderExpenseChart(response.expensesByCategory);
         renderTrendChart(response.trends);
         
         console.log('🔄 Renderizando listas...');
@@ -691,20 +691,257 @@ function formatDate(date) {
     }
 }
 
-// Funciones placeholder
+// Exportar reporte financiero
 function exportFinancialReport() {
-    if (typeof showInfo === 'function') {
-        showInfo('Función de exportación en desarrollo');
-    } else {
-        alert('Función de exportación en desarrollo');
+    try {
+        if (!dashboardData) {
+            showError('No hay datos para exportar. Carga el dashboard primero.');
+            return;
+        }
+
+        // Crear datos para exportar
+        const exportData = {
+            periodo: dashboardData.period?.name || 'Período no especificado',
+            fechaGeneracion: new Date().toLocaleDateString('es-ES'),
+            resumen: {
+                totalIngresos: dashboardData.summary?.totalIncome || 0,
+                totalGastos: dashboardData.summary?.totalExpenses || 0,
+                flujoNeto: dashboardData.summary?.netCashFlow || 0,
+                facturasPendientes: dashboardData.summary?.pendingCount || 0,
+                montoPendiente: dashboardData.summary?.pendingAmount || 0
+            },
+            ingresosPorCategoria: dashboardData.incomeByCategory || {},
+            gastosPorCategoria: dashboardData.expensesByCategory || {},
+            actividadReciente: dashboardData.recentActivity || []
+        };
+
+        // Crear CSV
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        // Encabezado del reporte
+        csvContent += "REPORTE FINANCIERO\\n";
+        csvContent += "Período," + exportData.periodo + "\\n";
+        csvContent += "Fecha de Generación," + exportData.fechaGeneracion + "\\n\\n";
+        
+        // Resumen
+        csvContent += "RESUMEN FINANCIERO\\n";
+        csvContent += "Concepto,Monto\\n";
+        csvContent += "Total Ingresos," + exportData.resumen.totalIngresos + "\\n";
+        csvContent += "Total Gastos," + exportData.resumen.totalGastos + "\\n";
+        csvContent += "Flujo Neto," + exportData.resumen.flujoNeto + "\\n";
+        csvContent += "Facturas Pendientes," + exportData.resumen.facturasPendientes + "\\n";
+        csvContent += "Monto Pendiente," + exportData.resumen.montoPendiente + "\\n\\n";
+        
+        // Ingresos por categoría
+        csvContent += "INGRESOS POR CATEGORÍA\\n";
+        csvContent += "Categoría,Total,Transacciones\\n";
+        Object.entries(exportData.ingresosPorCategoria).forEach(([categoria, datos]) => {
+            csvContent += categoria + "," + datos.total + "," + datos.count + "\\n";
+        });
+        csvContent += "\\n";
+        
+        // Gastos por categoría
+        csvContent += "GASTOS POR CATEGORÍA\\n";
+        csvContent += "Categoría,Total,Transacciones\\n";
+        Object.entries(exportData.gastosPorCategoria).forEach(([categoria, datos]) => {
+            csvContent += categoria + "," + datos.total + "," + datos.count + "\\n";
+        });
+
+        // Crear y descargar archivo
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "reporte_financiero_" + new Date().toISOString().split('T')[0] + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showNotification('Reporte financiero exportado exitosamente', 'success');
+
+    } catch (error) {
+        console.error('Error exportando reporte:', error);
+        showError('Error al exportar el reporte: ' + error.message);
     }
 }
 
+// Mostrar modal de balance personalizado
 function showBalanceModal() {
-    if (typeof showInfo === 'function') {
-        showInfo('Modal de balance personalizado en desarrollo');
-    } else {
-        alert('Modal de balance personalizado en desarrollo');
+    try {
+        // Crear modal si no existe
+        let modal = document.getElementById('balanceModal');
+        if (!modal) {
+            const modalHTML = `
+                <div class="modal fade" id="balanceModal" tabindex="-1" aria-labelledby="balanceModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-lg">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title" id="balanceModalLabel">
+                                    <i class="bi bi-calculator"></i> Balance Personalizado
+                                </h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Fecha Desde</label>
+                                        <input type="date" class="form-control" id="balanceStartDate">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Fecha Hasta</label>
+                                        <input type="date" class="form-control" id="balanceEndDate">
+                                    </div>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Categorías a Incluir</label>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includeIncome" checked>
+                                        <label class="form-check-label" for="includeIncome">Ingresos</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includeExpenses" checked>
+                                        <label class="form-check-label" for="includeExpenses">Gastos</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="includePending" checked>
+                                        <label class="form-check-label" for="includePending">Facturas Pendientes</label>
+                                    </div>
+                                </div>
+                                <div id="balanceResults" class="mt-3"></div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                                <button type="button" class="btn btn-primary" onclick="generateCustomBalance()">
+                                    <i class="bi bi-calculator"></i> Generar Balance
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="exportCustomBalance()" disabled id="exportBalanceBtn">
+                                    <i class="bi bi-download"></i> Exportar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            modal = document.getElementById('balanceModal');
+        }
+
+        // Configurar fechas por defecto (mes actual)
+        const now = new Date();
+        const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        
+        document.getElementById('balanceStartDate').value = startOfMonth.toISOString().split('T')[0];
+        document.getElementById('balanceEndDate').value = endOfMonth.toISOString().split('T')[0];
+
+        // Mostrar modal
+        const bootstrapModal = new bootstrap.Modal(modal);
+        bootstrapModal.show();
+
+    } catch (error) {
+        console.error('Error mostrando modal de balance:', error);
+        showError('Error al mostrar el modal de balance: ' + error.message);
+    }
+}
+
+// Generar balance personalizado
+async function generateCustomBalance() {
+    try {
+        const startDate = document.getElementById('balanceStartDate').value;
+        const endDate = document.getElementById('balanceEndDate').value;
+        const includeIncome = document.getElementById('includeIncome').checked;
+        const includeExpenses = document.getElementById('includeExpenses').checked;
+        const includePending = document.getElementById('includePending').checked;
+
+        if (!startDate || !endDate) {
+            showError('Por favor selecciona las fechas');
+            return;
+        }
+
+        showLoading();
+
+        // Llamar a la API de balance
+        const response = await api.request(`/reports/balance?startDate=${startDate}&endDate=${endDate}`);
+        
+        // Mostrar resultados
+        const resultsDiv = document.getElementById('balanceResults');
+        resultsDiv.innerHTML = `
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Balance del ${new Date(startDate).toLocaleDateString('es-ES')} al ${new Date(endDate).toLocaleDateString('es-ES')}</h6>
+                </div>
+                <div class="card-body">
+                    ${includeIncome ? `
+                        <div class="row mb-2">
+                            <div class="col-6"><strong>Total Ingresos:</strong></div>
+                            <div class="col-6 text-success">${formatCurrency(response.summary.totalIncome)}</div>
+                        </div>
+                    ` : ''}
+                    ${includeExpenses ? `
+                        <div class="row mb-2">
+                            <div class="col-6"><strong>Total Gastos:</strong></div>
+                            <div class="col-6 text-danger">${formatCurrency(response.summary.totalExpenses)}</div>
+                        </div>
+                    ` : ''}
+                    <hr>
+                    <div class="row">
+                        <div class="col-6"><strong>Balance Neto:</strong></div>
+                        <div class="col-6 ${response.summary.netBalance >= 0 ? 'text-success' : 'text-danger'}">
+                            <strong>${formatCurrency(response.summary.netBalance)}</strong>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Habilitar botón de exportar
+        document.getElementById('exportBalanceBtn').disabled = false;
+        window.customBalanceData = response;
+
+        hideLoading();
+        showNotification('Balance generado exitosamente', 'success');
+
+    } catch (error) {
+        console.error('Error generando balance:', error);
+        showError('Error al generar el balance: ' + error.message);
+        hideLoading();
+    }
+}
+
+// Exportar balance personalizado
+function exportCustomBalance() {
+    try {
+        if (!window.customBalanceData) {
+            showError('No hay datos de balance para exportar');
+            return;
+        }
+
+        const data = window.customBalanceData;
+        let csvContent = "data:text/csv;charset=utf-8,";
+        
+        csvContent += "BALANCE PERSONALIZADO\\n";
+        csvContent += "Período," + new Date(data.period.startDate).toLocaleDateString('es-ES') + " - " + new Date(data.period.endDate).toLocaleDateString('es-ES') + "\\n";
+        csvContent += "Fecha de Generación," + new Date().toLocaleDateString('es-ES') + "\\n\\n";
+        
+        csvContent += "RESUMEN\\n";
+        csvContent += "Concepto,Monto\\n";
+        csvContent += "Total Ingresos," + data.summary.totalIncome + "\\n";
+        csvContent += "Total Gastos," + data.summary.totalExpenses + "\\n";
+        csvContent += "Balance Neto," + data.summary.netBalance + "\\n\\n";
+
+        // Crear y descargar archivo
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "balance_personalizado_" + new Date().toISOString().split('T')[0] + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        showNotification('Balance exportado exitosamente', 'success');
+
+    } catch (error) {
+        console.error('Error exportando balance:', error);
+        showError('Error al exportar el balance: ' + error.message);
     }
 }
 
@@ -713,5 +950,7 @@ window.initFinancialDashboard = initFinancialDashboard;
 window.loadFinancialOverview = loadFinancialOverview;
 window.exportFinancialReport = exportFinancialReport;
 window.showBalanceModal = showBalanceModal;
+window.generateCustomBalance = generateCustomBalance;
+window.exportCustomBalance = exportCustomBalance;
 
 console.log('✅ Financial Dashboard Working cargado correctamente');

@@ -129,6 +129,26 @@
                     <span class="menu-text">Dashboard Financiero</span>
                 </a>
 
+                <!-- GESTIÓN DE FONDOS - NUEVA SECCIÓN -->
+                <div class="menu-section">
+                    <div class="menu-item" onclick="toggleSubmenu('funds')">
+                        <i class="bi bi-bank"></i>
+                        <span class="menu-text">Gestión de Fondos</span>
+                        <i class="bi bi-chevron-down submenu-arrow"></i>
+                    </div>
+                    <div id="funds-submenu" class="submenu">
+                        <a href="#" class="submenu-item" data-page="funds">
+                            <i class="bi bi-wallet2"></i> Fondos
+                        </a>
+                        <a href="#" class="submenu-item" data-page="fund-loans">
+                            <i class="bi bi-arrow-left-right"></i> Préstamos entre Fondos
+                        </a>
+                        <a href="#" class="submenu-item" data-page="fund-alerts">
+                            <i class="bi bi-exclamation-triangle"></i> Alertas de Fondos
+                        </a>
+                    </div>
+                </div>
+
                 <!-- EVENTOS ESCOLARES - SECCIÓN ACTUALIZADA -->
                 <div class="menu-section">
                     <div class="menu-item" onclick="toggleSubmenu('events')">
@@ -468,6 +488,27 @@
                             </div>
                         </div>
                         <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="paymentConcept" class="form-label">Concepto *</label>
+                                    <select class="form-select" id="paymentConcept" name="concept" required>
+                                        <option value="">Seleccionar concepto</option>
+                                        <option value="TUITION">Matrícula</option>
+                                        <option value="MONTHLY">Mensualidad</option>
+                                        <option value="EVENT">Evento</option>
+                                        <option value="UNIFORM">Uniforme</option>
+                                        <option value="BOOKS">Libros</option>
+                                        <option value="TRANSPORT">Transporte</option>
+                                        <option value="CAFETERIA">Cafetería</option>
+                                        <option value="OTHER">Otros</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <!-- Espacio para futuras expansiones -->
+                            </div>
+                        </div>
+                        <div class="row">
                             <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="paymentAmount" class="form-label">Monto</label>
@@ -618,6 +659,10 @@
     <script src="js/dashboard.js"></script>
     <script src="js/students.js"></script>
     <script src="js/invoices.js"></script>
+    <script src="/js/FundSelectorModal.js"></script>
+    <script src="js/funds.js"></script>
+    <script src="js/fund-loans.js"></script>
+    <script src="js/fund-alerts.js"></script>
     <script src="js/reports.js"></script>
     <script src="js/financial-dashboard-working.js?v=1755144000000"></script>
     <script src="js/payments.js"></script>

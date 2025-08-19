@@ -302,6 +302,83 @@ router.get('/cash-flow/:year/:month', authenticateToken, async (req, res) => {
     }
 });
 
+// Get balance report
+router.get('/balance', authenticateToken, async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+
+        // Build date filter
+        const dateFilter = {};
+        if (startDate) dateFilter.gte = new Date(startDate);
+        if (endDate) dateFilter.lte = new Date(endDate);
+
+        // Get all payments (income)
+        const payments = await prisma.payment.findMany({
+            where: {
+                ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
+            },
+            include: {
+                invoice: true,
+                event: true
+            }
+        });
+
+        // Get supplier invoices (expenses)
+        const expenses = await prisma.invoice.findMany({
+            where: {
+                type: 'INCOMING',
+                ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
+            }
+        });
+
+        // Get pending invoices
+        const pendingInvoices = await prisma.invoice.findMany({
+            where: {
+                status: {
+                    in: ['PENDING', 'PARTIAL']
+                },
+                type: 'OUTGOING',
+                ...(Object.keys(dateFilter).length > 0 && { date: dateFilter })
+            },
+            include: {
+                payments: true
+            }
+        });
+
+        // Calculate totals
+        const totalIncome = payments.reduce((sum, p) => sum + p.amount, 0);
+        const totalExpenses = expenses.reduce((sum, e) => sum + e.total, 0);
+        const totalPendingAmount = pendingInvoices.reduce((sum, invoice) => {
+            const paidAmount = invoice.payments.reduce((pSum, p) => pSum + p.amount, 0);
+            return sum + (invoice.total - paidAmount);
+        }, 0);
+
+        const netBalance = totalIncome - totalExpenses;
+
+        res.json({
+            period: {
+                startDate: startDate || null,
+                endDate: endDate || null
+            },
+            summary: {
+                totalIncome,
+                totalExpenses,
+                netBalance,
+                totalPendingAmount
+            },
+            details: {
+                incomeTransactions: payments.length,
+                expenseTransactions: expenses.length,
+                pendingInvoices: pendingInvoices.length
+            }
+        });
+
+    } catch (error) {
+        console.error('Error getting balance report:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
 // Get event analysis report
 router.get('/event-analysis/:eventId', authenticateToken, async (req, res) => {
     try {

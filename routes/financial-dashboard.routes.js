@@ -23,26 +23,120 @@ router.get('/overview', authenticateToken, async (req, res) => {
         // Calcular fechas según el período
         const dates = calculatePeriodDates(period);
         
-        // Obtener datos financieros en paralelo
-        const [
-            incomeData,
-            expenseData,
-            pendingInvoices,
-            recentTransactions,
-            categoryBreakdown,
-            monthlyTrends
-        ] = await Promise.all([
-            getIncomeData(dates),
-            getExpenseData(dates),
-            getPendingInvoices(),
-            getRecentTransactions(10),
-            getCategoryBreakdown(dates),
-            getMonthlyTrends(6) // Últimos 6 meses
+        // Obtener datos básicos sin relaciones complejas
+        const [payments, invoices] = await Promise.all([
+            prisma.payment.findMany({
+                where: {
+                    date: {
+                        gte: dates.startDate,
+                        lte: dates.endDate
+                    },
+                    status: 'COMPLETED'
+                },
+                select: {
+                    id: true,
+                    amount: true,
+                    method: true,
+                    date: true,
+                    studentId: true,
+                    invoiceId: true
+                },
+                orderBy: { date: 'desc' }
+            }),
+            prisma.invoice.findMany({
+                where: {
+                    date: {
+                        gte: dates.startDate,
+                        lte: dates.endDate
+                    },
+                    type: 'OUTGOING'
+                },
+                select: {
+                    id: true,
+                    total: true,
+                    concept: true,
+                    date: true,
+                    status: true
+                },
+                orderBy: { date: 'desc' }
+            })
         ]);
 
-        const totalIncome = incomeData.reduce((sum, item) => sum + item.amount, 0);
-        const totalExpenses = expenseData.reduce((sum, item) => sum + item.amount, 0);
+        // Calcular totales
+        const totalIncome = payments.reduce((sum, payment) => sum + payment.amount, 0);
+        const totalExpenses = invoices.reduce((sum, invoice) => sum + invoice.total, 0);
         const netCashFlow = totalIncome - totalExpenses;
+
+        // Obtener facturas pendientes
+        const pendingInvoices = await prisma.invoice.findMany({
+            where: {
+                status: { in: ['PENDING', 'PARTIAL'] }
+            },
+            select: {
+                id: true,
+                invoiceNumber: true,
+                total: true,
+                concept: true,
+                date: true,
+                status: true
+            },
+            orderBy: { date: 'desc' },
+            take: 10
+        });
+
+        // Agrupar ingresos por categoría
+        const incomeByCategory = {};
+        payments.forEach(payment => {
+            const category = payment.method || 'EFECTIVO';
+            if (!incomeByCategory[category]) {
+                incomeByCategory[category] = { total: 0, count: 0, transactions: [] };
+            }
+            incomeByCategory[category].total += payment.amount;
+            incomeByCategory[category].count += 1;
+            incomeByCategory[category].transactions.push(payment);
+        });
+
+        // Agrupar gastos por categoría
+        const expensesByCategory = {};
+        invoices.forEach(invoice => {
+            const category = invoice.concept || 'GASTOS_GENERALES';
+            if (!expensesByCategory[category]) {
+                expensesByCategory[category] = { total: 0, count: 0, transactions: [] };
+            }
+            expensesByCategory[category].total += invoice.total;
+            expensesByCategory[category].count += 1;
+            expensesByCategory[category].transactions.push(invoice);
+        });
+
+        // Generar tendencias básicas (últimos 6 meses)
+        const trends = [];
+        for (let i = 5; i >= 0; i--) {
+            const monthDate = new Date();
+            monthDate.setMonth(monthDate.getMonth() - i);
+            const monthStart = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+            const monthEnd = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0);
+            
+            const monthPayments = await prisma.payment.findMany({
+                where: {
+                    date: { gte: monthStart, lte: monthEnd },
+                    status: 'COMPLETED'
+                }
+            });
+            
+            const monthInvoices = await prisma.invoice.findMany({
+                where: {
+                    date: { gte: monthStart, lte: monthEnd },
+                    type: 'OUTGOING'
+                }
+            });
+
+            trends.push({
+                month: monthDate.toISOString().slice(0, 7),
+                monthName: monthDate.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' }),
+                income: monthPayments.reduce((sum, p) => sum + p.amount, 0),
+                expenses: monthInvoices.reduce((sum, i) => sum + i.total, 0)
+            });
+        }
 
         const response = {
             period: {
@@ -59,20 +153,46 @@ router.get('/overview', authenticateToken, async (req, res) => {
             },
             income: {
                 total: totalIncome,
-                byCategory: groupByCategory(incomeData),
-                transactions: incomeData.slice(0, 10) // Últimas 10
+                transactions: payments.slice(0, 10).map(payment => ({
+                    id: payment.id,
+                    amount: payment.amount,
+                    method: payment.method,
+                    date: payment.date,
+                    description: 'Pago recibido',
+                    category: 'Ingresos'
+                }))
             },
             expenses: {
                 total: totalExpenses,
-                byCategory: groupByCategory(expenseData),
-                transactions: expenseData.slice(0, 10) // Últimas 10
+                transactions: invoices.slice(0, 10).map(invoice => ({
+                    id: invoice.id,
+                    amount: invoice.total,
+                    date: invoice.date,
+                    description: invoice.concept || 'Gasto',
+                    category: 'Gastos'
+                }))
             },
             pending: {
-                invoices: pendingInvoices.slice(0, 10),
+                invoices: pendingInvoices,
                 total: pendingInvoices.reduce((sum, inv) => sum + inv.total, 0)
             },
-            trends: monthlyTrends,
-            recentActivity: recentTransactions
+            incomeByCategory,
+            expensesByCategory,
+            trends,
+            recentActivity: [
+                ...payments.slice(0, 5).map(p => ({
+                    type: 'payment',
+                    description: 'Pago recibido',
+                    amount: p.amount,
+                    date: p.date
+                })),
+                ...invoices.slice(0, 5).map(i => ({
+                    type: 'expense',
+                    description: i.concept || 'Gasto',
+                    amount: i.total,
+                    date: i.date
+                }))
+            ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10)
         };
 
         console.log('✅ Overview financiero generado exitosamente');
@@ -80,7 +200,10 @@ router.get('/overview', authenticateToken, async (req, res) => {
 
     } catch (error) {
         console.error('❌ Error generando overview financiero:', error);
-        res.status(500).json({ error: 'Error al generar dashboard financiero' });
+        res.status(500).json({ 
+            error: 'Error al generar dashboard financiero',
+            details: error.message 
+        });
     }
 });
 

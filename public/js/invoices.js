@@ -14,6 +14,10 @@ async function initInvoices() {
         // Render invoices content
         renderInvoicesContent();
 
+        // Create modals
+        createSupplierInvoiceModal();
+        // External invoice modal uses SweetAlert, no need to create
+
         // Load invoices data
         await loadInvoices();
 
@@ -287,6 +291,16 @@ async function showCreateExternalInvoiceModal() {
                                 <input type="date" class="form-control" id="externalInvoiceDueDate" required>
                             </div>
                             <div class="mb-3">
+                                <label for="externalInvoiceFund" class="form-label">💰 Fondo para el Pago:</label>
+                                <select class="form-select" id="externalInvoiceFund" required>
+                                    <option value="">Cargando fondos...</option>
+                                </select>
+                                <small class="form-text text-muted">Selecciona de qué fondo se cobrará esta factura</small>
+                            </div>
+                            <div id="externalFundBalanceInfo" class="alert alert-info d-none mb-3">
+                                <small><strong>Saldo disponible:</strong> <span id="externalSelectedFundBalance">$0</span></small>
+                            </div>
+                            <div class="mb-3">
                                 <label for="externalInvoiceObservations" class="form-label">Observaciones:</label>
                                 <textarea class="form-control" id="externalInvoiceObservations" rows="2"></textarea>
                             </div>
@@ -327,7 +341,7 @@ async function showCreateExternalInvoiceModal() {
             cancelButtonText: 'Cancelar',
             confirmButtonColor: '#28a745',
             width: '900px',
-            didOpen: () => {
+            didOpen: async () => {
                 // Set default due date (30 days from now)
                 const dueDate = new Date();
                 dueDate.setDate(dueDate.getDate() + 30);
@@ -336,15 +350,19 @@ async function showCreateExternalInvoiceModal() {
                 // Add event listeners for total calculation
                 updateExternalInvoiceTotal();
                 document.getElementById('externalInvoiceItems').addEventListener('input', updateExternalInvoiceTotal);
+
+                // Load funds for external invoice
+                await loadFundsForExternalInvoice();
             },
             preConfirm: () => {
                 const clientName = document.getElementById('externalClientName').value;
                 const clientDocument = document.getElementById('externalClientDocument').value;
                 const concept = document.getElementById('externalInvoiceConcept').value;
                 const dueDate = document.getElementById('externalInvoiceDueDate').value;
+                const fundId = document.getElementById('externalInvoiceFund').value;
 
-                if (!clientName || !clientDocument || !concept || !dueDate) {
-                    Swal.showValidationMessage('Todos los campos obligatorios deben ser completados');
+                if (!clientName || !clientDocument || !concept || !dueDate || !fundId) {
+                    Swal.showValidationMessage('Todos los campos obligatorios deben ser completados, incluyendo el fondo');
                     return false;
                 }
 
@@ -372,6 +390,7 @@ async function showCreateExternalInvoiceModal() {
                     concept,
                     dueDate,
                     observations: document.getElementById('externalInvoiceObservations').value,
+                    fundId,
                     items
                 };
             }
@@ -380,23 +399,24 @@ async function showCreateExternalInvoiceModal() {
         if (result.isConfirmed) {
             showLoading();
 
+            // Calculate total from items
+            const total = result.value.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+            
             // Create external invoice
             const invoiceData = {
                 ...result.value,
-                isExternal: true
+                isExternal: true,
+                type: 'OUTGOING',
+                subtotal: total,
+                tax: 0,
+                total: total
             };
 
-            const invoiceResult = await api.createExternalInvoice(invoiceData);
+            // Procesar factura externa con fondo seleccionado
+            console.log('💾 Procesando factura externa con fondo:', invoiceData.fundId);
+            await processExternalInvoiceWithSelectedFund(invoiceData, invoiceData.fundId);
 
-            showSuccess('Factura externa creada exitosamente');
-
-            // Notify dashboard of new invoice
-            if (typeof notifyInvoiceGenerated === 'function') {
-                notifyInvoiceGenerated({
-                    invoiceNumber: invoiceResult.invoice?.invoiceNumber || 'N/A',
-                    concept: invoiceData.concept || 'OTHER'
-                });
-            }
+            // Dashboard notification is handled in processExternalInvoiceWithSelectedFund
 
             // Reload invoices
             await loadInvoices();
@@ -1170,6 +1190,46 @@ function notifyFinancialChange(type, data) {
     console.log('📢 Evento financiero emitido:', type);
 }
 
+// Función para cerrar el modal de factura de proveedor y limpiar formulario
+function closeSupplierInvoiceModal() {
+    // Cerrar modal
+    const modal = bootstrap.Modal.getInstance(document.getElementById('supplierInvoiceModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    // Limpiar formulario
+    console.log('📋 Obteniendo formulario...');
+        const form = document.getElementById('supplierInvoiceForm');
+        console.log('📋 Formulario encontrado:', !!form);
+    if (form) {
+        form.reset();
+    }
+
+    // Resetear items de la factura
+    const itemsContainer = document.getElementById('supplierInvoiceItems');
+    if (itemsContainer) {
+        itemsContainer.innerHTML = `
+            <div class="row mb-2 supplier-invoice-item">
+                <div class="col-md-5">
+                    <input type="text" class="form-control item-description" placeholder="Descripción" required>
+                </div>
+                <div class="col-md-2">
+                    <input type="number" class="form-control item-quantity" placeholder="Cant." min="1" value="1" required>
+                </div>
+                <div class="col-md-3">
+                    <input type="number" class="form-control item-price" placeholder="Precio Unit." min="0" step="0.01" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSupplierInvoiceItem(this)">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+}
+
 // Export functions for global access
 window.initInvoices = initInvoices;
 window.loadInvoices = loadInvoices;
@@ -1219,30 +1279,152 @@ function switchInvoiceType(type) {
 
 // Show create supplier invoice modal
 function showCreateSupplierInvoiceModal() {
-    const modalElement = document.getElementById('supplierInvoiceModal') || createSupplierInvoiceModal();
+    console.log('📄 Mostrando modal de factura de proveedor...');
+    
+    const modalElement = document.getElementById('supplierInvoiceModal');
+    if (!modalElement) {
+        console.error('❌ Modal de factura de proveedor no encontrado');
+        return;
+    }
+    
     const modal = new bootstrap.Modal(modalElement);
-
-    // Handle accessibility properly
-    modalElement.addEventListener('shown.bs.modal', function () {
-        // Remove aria-hidden when modal is shown
-        modalElement.removeAttribute('aria-hidden');
-        // Focus on first input for better accessibility
-        setTimeout(() => {
-            const firstInput = modalElement.querySelector('input:not([type="hidden"]):not([disabled])');
-            if (firstInput) {
-                firstInput.focus();
-            }
-        }, 100); // Small delay to ensure modal is fully rendered
-    });
-
-    modalElement.addEventListener('hidden.bs.modal', function () {
-        // Add aria-hidden back when modal is hidden
-        modalElement.setAttribute('aria-hidden', 'true');
-    });
-
+    
+    // Limpiar formulario
+    document.getElementById('supplierInvoiceForm').reset();
+    document.getElementById('supplierInvoiceTotal').textContent = '$0';
+    
+    // Resetear items
+    const itemsContainer = document.getElementById('supplierInvoiceItems');
+    itemsContainer.innerHTML = `
+        <div class="row mb-2 supplier-invoice-item">
+            <div class="col-md-5">
+                <input type="text" class="form-control item-description" placeholder="Descripción" required>
+            </div>
+            <div class="col-md-2">
+                <input type="number" class="form-control item-quantity" placeholder="Cant." min="1" value="1" required>
+            </div>
+            <div class="col-md-3">
+                <input type="number" class="form-control item-price" placeholder="Precio Unit." min="0" step="0.01" required>
+            </div>
+            <div class="col-md-2">
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeSupplierInvoiceItem(this)">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+    
+    // Ocultar información de saldo
+    const balanceInfo = document.getElementById('fundBalanceInfo');
+    if (balanceInfo) {
+        balanceInfo.classList.add('d-none');
+    }
+    
     // Remove aria-hidden before showing to prevent accessibility issues
     modalElement.removeAttribute('aria-hidden');
+    
+    // Cargar fondos disponibles
+    loadFundsForSupplierInvoice();
+    
     modal.show();
+}
+
+// Cargar fondos disponibles para facturas de proveedor
+async function loadFundsForSupplierInvoice() {
+    try {
+        const fundSelect = document.getElementById('supplierInvoiceFund');
+        if (!fundSelect) return;
+        
+        console.log('📋 Cargando fondos para factura de proveedor...');
+        
+        // Obtener fondos activos
+        const response = await api.getFunds({ isActive: 'true' });
+        const funds = response.funds || [];
+        
+        // Limpiar opciones
+        fundSelect.innerHTML = '<option value="">Seleccionar fondo</option>';
+        
+        // Agregar fondos
+        funds.forEach(fund => {
+            const option = document.createElement('option');
+            option.value = fund.id;
+            option.textContent = `${fund.name} (${fund.code}) - ${formatCurrency(fund.currentBalance)}`;
+            option.dataset.balance = fund.currentBalance;
+            fundSelect.appendChild(option);
+        });
+        
+        // Agregar listener para mostrar saldo
+        fundSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const balanceInfo = document.getElementById('fundBalanceInfo');
+            const balanceSpan = document.getElementById('selectedFundBalance');
+            
+            if (selectedOption.dataset.balance) {
+                balanceSpan.textContent = formatCurrency(selectedOption.dataset.balance);
+                balanceInfo.classList.remove('d-none');
+            } else {
+                balanceInfo.classList.add('d-none');
+            }
+        });
+        
+        console.log(`✅ Cargados ${funds.length} fondos`);
+        
+    } catch (error) {
+        console.error('❌ Error cargando fondos:', error);
+        const fundSelect = document.getElementById('supplierInvoiceFund');
+        if (fundSelect) {
+            fundSelect.innerHTML = '<option value="">Error cargando fondos</option>';
+        }
+    }
+}
+
+// Cargar fondos disponibles para facturas externas
+async function loadFundsForExternalInvoice() {
+    try {
+        const fundSelect = document.getElementById('externalInvoiceFund');
+        if (!fundSelect) return;
+        
+        console.log('📋 Cargando fondos para factura externa...');
+        
+        // Obtener fondos activos
+        const response = await api.getFunds({ isActive: 'true' });
+        const funds = response.funds || [];
+        
+        // Limpiar opciones
+        fundSelect.innerHTML = '<option value="">Seleccionar fondo</option>';
+        
+        // Agregar fondos
+        funds.forEach(fund => {
+            const option = document.createElement('option');
+            option.value = fund.id;
+            option.textContent = `${fund.name} (${fund.code}) - ${formatCurrency(fund.currentBalance)}`;
+            option.dataset.balance = fund.currentBalance;
+            fundSelect.appendChild(option);
+        });
+        
+        // Agregar listener para mostrar saldo
+        fundSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const balanceInfo = document.getElementById('externalFundBalanceInfo');
+            const balanceSpan = document.getElementById('externalSelectedFundBalance');
+            
+            if (selectedOption.dataset.balance) {
+                balanceSpan.textContent = formatCurrency(selectedOption.dataset.balance);
+                balanceInfo.classList.remove('d-none');
+            } else {
+                balanceInfo.classList.add('d-none');
+            }
+        });
+        
+        console.log(`✅ Cargados ${funds.length} fondos para factura externa`);
+        
+    } catch (error) {
+        console.error('❌ Error cargando fondos para factura externa:', error);
+        const fundSelect = document.getElementById('externalInvoiceFund');
+        if (fundSelect) {
+            fundSelect.innerHTML = '<option value="">Error cargando fondos</option>';
+        }
+    }
 }
 
 // Create supplier invoice modal
@@ -1365,6 +1547,24 @@ function createSupplierInvoiceModal() {
                                 </div>
                             </div>
 
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0">💰 Selección de Fondos</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Fondo para el Pago *</label>
+                                        <select class="form-select" id="supplierInvoiceFund" required>
+                                            <option value="">Cargando fondos...</option>
+                                        </select>
+                                        <div class="form-text">Selecciona de qué fondo se pagará esta factura</div>
+                                    </div>
+                                    <div id="fundBalanceInfo" class="alert alert-info d-none">
+                                        <small><strong>Saldo disponible:</strong> <span id="selectedFundBalance">$0</span></small>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="mb-3">
                                 <label class="form-label">Observaciones</label>
                                 <textarea class="form-control" id="supplierInvoiceObservations" rows="3"></textarea>
@@ -1373,7 +1573,7 @@ function createSupplierInvoiceModal() {
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                        <button type="button" class="btn btn-primary" onclick="saveSupplierInvoice()">
+                        <button type="button" class="btn btn-primary" id="saveSupplierInvoiceBtn">
                             <i class="bi bi-save"></i> Guardar Factura
                         </button>
                     </div>
@@ -1391,6 +1591,17 @@ function createSupplierInvoiceModal() {
         }
     });
 
+    
+    
+    // Agregar event listener al botón de guardar
+    const saveBtn = document.getElementById('saveSupplierInvoiceBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function() {
+            console.log('🔘 Botón de guardar clickeado');
+            saveSupplierInvoice();
+        });
+        console.log('✅ Event listener agregado al botón de guardar');
+    }
     return document.getElementById('supplierInvoiceModal');
 }
 
@@ -1445,6 +1656,7 @@ function updateSupplierInvoiceTotal() {
 
 // Save supplier invoice
 async function saveSupplierInvoice() {
+    console.log('🔍 INICIANDO saveSupplierInvoice...');
     try {
         const form = document.getElementById('supplierInvoiceForm');
         if (!form.checkValidity()) {
@@ -1497,6 +1709,240 @@ async function saveSupplierInvoice() {
             items: items
         };
 
+        // Obtener el fondo seleccionado
+        console.log('💰 Verificando fondo seleccionado...');
+        const selectedFundId = document.getElementById('supplierInvoiceFund').value;
+        console.log('💰 Fondo seleccionado:', selectedFundId);
+        if (!selectedFundId) {
+            showError('Debe seleccionar un fondo para el pago');
+            hideLoading();
+            return;
+        }
+        
+        // Procesar la factura con el fondo seleccionado
+        await processSupplierInvoiceWithSelectedFund(invoiceData, selectedFundId);
+        hideLoading();
+
+    } catch (error) {
+        console.error('Error saving supplier invoice:', error);
+        showError('Error al guardar la factura de proveedor');
+        hideLoading();
+    }
+}
+
+// Mostrar selector de fondos para facturas de proveedor
+function showFundSelectorForSupplierInvoice(invoiceData) {
+    try {
+        // Verificar si el selector de fondos está disponible
+        if (typeof getFundSelector !== 'function') {
+            console.warn('FundSelector no disponible, procesando factura sin selector');
+            processSupplierInvoiceWithoutFunds(invoiceData);
+            return;
+        }
+            
+        console.log('🎯 Mostrando selector de fondos para factura de proveedor');
+        
+        // Obtener instancia del selector de fondos
+        const fundSelector = getFundSelector();
+        
+        // Configurar el selector para gastos
+        fundSelector.show({
+            totalAmount: invoiceData.total,
+            invoiceData: {
+                concept: invoiceData.concept,
+                supplierName: invoiceData.supplierName,
+                type: 'INCOMING' // Es una factura recibida (gasto para nosotros)
+            },
+            onConfirm: async (fundSelections) => {
+                try {
+                    console.log('✅ Fondos seleccionados:', fundSelections);
+                    // Procesar la factura con la información de fondos
+                    await processSupplierInvoiceWithFunds(invoiceData, fundSelections);
+                } catch (error) {
+                    console.error('❌ Error procesando factura con fondos:', error);
+                    showError('Error al procesar la factura con fondos');
+                }
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error mostrando selector de fondos:', error);
+        // Fallback: procesar sin selector de fondos
+        processSupplierInvoiceWithoutFunds(invoiceData);
+    }
+}
+
+// Procesar factura de proveedor con fondo seleccionado
+async function processSupplierInvoiceWithSelectedFund(invoiceData, fundId) {
+    try {
+        showLoading();
+        
+        console.log('💾 Creando factura de proveedor...', invoiceData);
+        
+        // Crear la factura principal
+        const response = await api.post('/invoices', invoiceData);
+        
+        console.log('✅ Factura creada:', response);
+        
+        // Registrar el gasto en el fondo seleccionado
+        console.log('💰 Registrando gasto en fondo:', fundId);
+        await api.post(`/funds/${fundId}/expense`, {
+            amount: invoiceData.total,
+            description: `Factura proveedor: ${invoiceData.supplierName} - ${getSupplierConceptText(invoiceData.concept)}`,
+            reference: response.invoiceNumber,
+            invoiceId: response.id
+        });
+
+        showSuccess('Factura de proveedor registrada exitosamente con trazabilidad de fondos');
+
+        // Notificar cambios para actualizar dashboard
+        if (typeof window.notifyExpenseRecorded === 'function') {
+            window.notifyExpenseRecorded({
+                invoiceId: response.id,
+                amount: invoiceData.total,
+                concept: invoiceData.concept,
+                fundId: fundId
+            });
+        }
+
+        // Cerrar modal y limpiar formulario
+        closeSupplierInvoiceModal();
+        
+        // Recargar facturas
+        await loadInvoices();
+        
+    } catch (error) {
+        console.error('Error saving supplier invoice with fund:', error);
+        showError('Error al guardar la factura de proveedor');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Procesar factura externa con fondo seleccionado
+async function processExternalInvoiceWithSelectedFund(invoiceData, fundId) {
+    try {
+        showLoading();
+        
+        console.log('💾 Creando factura externa...', invoiceData);
+        
+        // Validar datos antes de enviar
+        if (!invoiceData.clientName || !invoiceData.clientDocument || !invoiceData.concept) {
+            throw new Error('Faltan datos obligatorios de la factura');
+        }
+        
+        if (!invoiceData.items || invoiceData.items.length === 0) {
+            throw new Error('La factura debe tener al menos un item');
+        }
+        
+        // Crear la factura principal (usar endpoint específico para facturas externas)
+        const response = await api.post('/invoices/external', invoiceData);
+        
+        console.log('✅ Factura externa creada:', response);
+        
+        // Registrar el ingreso en el fondo seleccionado
+        console.log('💰 Registrando ingreso en fondo:', fundId);
+        await api.post(`/funds/${fundId}/income`, {
+            amount: invoiceData.total,
+            description: `Factura externa: ${invoiceData.clientName} - ${getConceptText(invoiceData.concept)}`,
+            reference: response.invoiceNumber,
+            invoiceId: response.id
+        });
+
+        showSuccess('Factura externa registrada exitosamente con trazabilidad de fondos');
+
+        // Notificar cambios para actualizar dashboard
+        if (typeof window.notifyIncomeRecorded === 'function') {
+            window.notifyIncomeRecorded({
+                invoiceId: response.id,
+                amount: invoiceData.total,
+                concept: invoiceData.concept,
+                fundId: fundId
+            });
+        }
+
+        // Recargar facturas
+        await loadInvoices();
+        
+    } catch (error) {
+        console.error('Error saving external invoice with fund:', error);
+        showError('Error al guardar la factura externa');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Procesar factura de proveedor sin selector de fondos (fallback)
+async function processSupplierInvoiceWithoutFunds(invoiceData) {
+    try {
+        showLoading();
+        
+        // Crear la factura sin trazabilidad de fondos
+        const response = await API.request('POST', '/api/invoices', invoiceData);
+        
+        showSuccess('Factura de proveedor registrada exitosamente');
+        
+        // Cerrar modal y limpiar formulario
+        closeSupplierInvoiceModal();
+        
+        // Recargar facturas
+        await loadInvoices();
+        
+    } catch (error) {
+        console.error('Error saving supplier invoice without funds:', error);
+        showError('Error al guardar la factura de proveedor');
+    } finally {
+        hideLoading();
+    }
+}
+
+// Procesar factura de proveedor con información de fondos
+async function processSupplierInvoiceWithFunds(invoiceData, fundSelections) {
+    try {
+        // Crear la factura principal
+        const response = await API.request('POST', '/api/invoices', invoiceData);
+        
+        // Registrar las transacciones en los fondos seleccionados (gastos)
+        for (const selection of fundSelections) {
+            await api.post(`/funds/${selection.fundId}/expense`, {
+                amount: selection.amount,
+                description: `Factura proveedor: ${invoiceData.supplierName} - ${getSupplierConceptText(invoiceData.concept)}`,
+                reference: response.invoiceNumber,
+                invoiceId: response.id
+            });
+        }
+
+        showSuccess('Factura de proveedor registrada exitosamente con trazabilidad de fondos');
+
+        // Notificar cambios para actualizar dashboard
+        if (typeof window.notifyExpenseRecorded === 'function') {
+            window.notifyExpenseRecorded({
+                invoiceId: response.id,
+                amount: invoiceData.total,
+                concept: invoiceData.concept,
+                fundSelections: fundSelections
+            });
+        }
+
+        // Cerrar modal y limpiar formulario
+        closeSupplierInvoiceModal();
+
+        // Reload invoices
+        await loadInvoices();
+
+        hideLoading();
+
+    } catch (error) {
+        console.error('Error saving supplier invoice:', error);
+        showError('Error al guardar la factura de proveedor');
+        hideLoading();
+    }
+}
+
+// Procesar factura de proveedor sin selector de fondos (fallback)
+async function processSupplierInvoiceWithoutFunds(invoiceData) {
+    try {
+        // Crear la factura principal
         const response = await API.request('POST', '/api/invoices', invoiceData);
 
         showSuccess('Factura de proveedor registrada exitosamente');
@@ -1506,6 +1952,7 @@ async function saveSupplierInvoice() {
         modal.hide();
 
         // Reset form
+        const form = document.getElementById('supplierInvoiceForm');
         form.reset();
         document.getElementById('supplierInvoiceItems').innerHTML = `
             <div class="row mb-2 supplier-invoice-item">
@@ -1529,13 +1976,128 @@ async function saveSupplierInvoice() {
         // Reload invoices
         await loadInvoices();
 
-        hideLoading();
+    } catch (error) {
+        console.error('Error saving supplier invoice without funds:', error);
+        showError('Error al guardar la factura de proveedor');
+    }
+}
+
+// Mostrar selector de fondos para facturas externas
+async function showFundSelectorForExternalInvoice(invoiceData) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Verificar si el selector de fondos está disponible
+            if (typeof getFundSelector !== 'function') {
+                console.warn('FundSelector no disponible, procesando factura sin selector');
+                processExternalInvoiceWithoutFunds(invoiceData).then(resolve).catch(reject);
+                return;
+            }
+            
+            // Obtener instancia del selector de fondos
+            const fundSelector = getFundSelector();
+            
+            // Configurar el selector para ingresos
+            fundSelector.show({
+                totalAmount: invoiceData.total,
+                invoiceData: {
+                    concept: invoiceData.concept,
+                    clientName: invoiceData.clientName,
+                    type: 'OUTGOING' // Es una factura emitida (ingreso para nosotros)
+                },
+                onConfirm: async (fundSelections) => {
+                    try {
+                        // Procesar la factura con la información de fondos
+                        await processExternalInvoiceWithFunds(invoiceData, fundSelections);
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                }
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Procesar factura externa con información de fondos
+async function processExternalInvoiceWithFunds(invoiceData, fundSelections) {
+    try {
+        // Crear la factura principal
+        const invoiceResult = await api.createExternalInvoice(invoiceData);
+        
+        // Registrar las transacciones en los fondos seleccionados (ingresos)
+        for (const selection of fundSelections) {
+            await api.post(`/funds/${selection.fundId}/income`, {
+                amount: selection.amount,
+                description: `Factura externa: ${invoiceData.clientName} - ${getConceptText(invoiceData.concept)}`,
+                reference: invoiceResult.invoice?.invoiceNumber || 'N/A',
+                invoiceId: invoiceResult.invoice?.id
+            });
+        }
+
+        showSuccess('Factura externa creada exitosamente con trazabilidad de fondos');
+
+        // Notify dashboard of new invoice
+        if (typeof notifyInvoiceGenerated === 'function') {
+            notifyInvoiceGenerated({
+                invoiceNumber: invoiceResult.invoice?.invoiceNumber || 'N/A',
+                concept: invoiceData.concept || 'OTHER',
+                fundSelections: fundSelections
+            });
+        }
+
+        // Reload invoices
+        await loadInvoices();
 
     } catch (error) {
-        console.error('Error saving supplier invoice:', error);
-        showError('Error al guardar la factura de proveedor');
-        hideLoading();
+        console.error('Error processing external invoice with funds:', error);
+        showError('Error al procesar la factura externa');
     }
+}
+
+// Procesar factura externa sin selector de fondos (fallback)
+async function processExternalInvoiceWithoutFunds(invoiceData) {
+    try {
+        // Crear la factura principal
+        const invoiceResult = await api.createExternalInvoice(invoiceData);
+
+        showSuccess('Factura externa creada exitosamente');
+
+        // Notify dashboard of new invoice
+        if (typeof notifyInvoiceGenerated === 'function') {
+            notifyInvoiceGenerated({
+                invoiceNumber: invoiceResult.invoice?.invoiceNumber || 'N/A',
+                concept: invoiceData.concept || 'OTHER'
+            });
+        }
+
+        // Reload invoices
+        await loadInvoices();
+
+    } catch (error) {
+        console.error('Error saving external invoice without funds:', error);
+        showError('Error al crear la factura externa');
+    }
+}
+
+// Get supplier concept text for display
+function getSupplierConceptText(concept) {
+    const concepts = {
+        'OFFICE_SUPPLIES': 'Útiles de Oficina',
+        'MAINTENANCE': 'Mantenimiento',
+        'UTILITIES': 'Servicios Públicos',
+        'PROFESSIONAL_SERVICES': 'Servicios Profesionales',
+        'EQUIPMENT': 'Equipos',
+        'CLEANING_SUPPLIES': 'Insumos de Aseo',
+        'FOOD_SUPPLIES': 'Insumos de Cafetería',
+        'EDUCATIONAL_MATERIALS': 'Material Educativo',
+        'TECHNOLOGY': 'Tecnología',
+        'INSURANCE': 'Seguros',
+        'RENT': 'Arrendamiento',
+        'OTHER': 'Otros'
+    };
+    return concepts[concept] || concept;
 }
 
 // Update concept text function to include supplier concepts
@@ -1575,3 +2137,78 @@ window.addSupplierInvoiceItem = addSupplierInvoiceItem;
 window.removeSupplierInvoiceItem = removeSupplierInvoiceItem;
 window.updateSupplierInvoiceTotal = updateSupplierInvoiceTotal;
 window.saveSupplierInvoice = saveSupplierInvoice;
+// Función de prueba para el botón de guardar
+function testSupplierInvoiceButton() {
+    console.log('🧪 PROBANDO BOTÓN DE FACTURA DE PROVEEDOR');
+    const modal = document.getElementById('supplierInvoiceModal');
+    const button = document.getElementById('saveSupplierInvoiceBtn');
+    const form = document.getElementById('supplierInvoiceForm');
+    
+    console.log('Modal encontrado:', !!modal);
+    console.log('Botón encontrado:', !!button);
+    console.log('Formulario encontrado:', !!form);
+    console.log('Función saveSupplierInvoice disponible:', typeof window.saveSupplierInvoice);
+    
+    if (button) {
+        console.log('Simulando click en el botón...');
+        button.click();
+    }
+}
+
+window.testSupplierInvoiceButton = testSupplierInvoiceButton;
+
+// Función de prueba para datos de factura externa
+function testExternalInvoiceData() {
+    console.log('🧪 PROBANDO DATOS DE FACTURA EXTERNA');
+    
+    const testData = {
+        clientName: "Cliente Test",
+        clientDocument: "12345678",
+        clientEmail: "test@test.com",
+        concept: "UNIFORM",
+        dueDate: "2025-09-17",
+        observations: "Test",
+        fundId: "test-fund-id",
+        items: [
+            {
+                description: "Producto test",
+                quantity: 1,
+                unitPrice: 50000
+            }
+        ],
+        isExternal: true,
+        type: 'OUTGOING',
+        subtotal: 50000,
+        tax: 0,
+        total: 50000
+    };
+    
+    console.log('Datos de prueba:', testData);
+    
+    // Validar estructura
+    const requiredFields = ['clientName', 'clientDocument', 'concept', 'items', 'total'];
+    const missingFields = requiredFields.filter(field => !testData[field]);
+    
+    if (missingFields.length > 0) {
+        console.log('❌ Campos faltantes:', missingFields);
+    } else {
+        console.log('✅ Todos los campos requeridos presentes');
+    }
+    
+    // Validar items
+    if (testData.items && testData.items.length > 0) {
+        const itemFields = ['description', 'quantity', 'unitPrice'];
+        testData.items.forEach((item, index) => {
+            const missingItemFields = itemFields.filter(field => !item[field]);
+            if (missingItemFields.length > 0) {
+                console.log(`❌ Item ${index + 1} campos faltantes:`, missingItemFields);
+            } else {
+                console.log(`✅ Item ${index + 1} válido`);
+            }
+        });
+    }
+    
+    return testData;
+}
+
+window.testExternalInvoiceData = testExternalInvoiceData;

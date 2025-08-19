@@ -243,7 +243,7 @@ function showPaymentModal(payment = null, mode = 'create') {
     bsModal.show();
 }
 
-// Save payment
+// Save payment with fund selection
 async function savePayment() {
     const form = document.getElementById('paymentForm');
     if (!form || !validateForm(form)) {
@@ -262,11 +262,118 @@ async function savePayment() {
         delete paymentData.invoiceId;
     }
     
+    const paymentId = paymentData.paymentId;
+    delete paymentData.paymentId;
+    
+    // Si es un pago nuevo, mostrar selector de fondos para trazabilidad
+    if (!paymentId && paymentData.amount > 0) {
+        try {
+            // Mostrar selector de fondos para determinar a qué fondo va el dinero
+            await showFundSelectorForPayment(paymentData);
+        } catch (error) {
+            console.error('Error con selector de fondos:', error);
+            // Continuar sin selector de fondos si hay error
+            await processPaymentWithoutFunds(paymentData, paymentId);
+        }
+    } else {
+        // Para ediciones, procesar normalmente
+        await processPaymentWithoutFunds(paymentData, paymentId);
+    }
+}
+
+// Mostrar selector de fondos para pagos
+async function showFundSelectorForPayment(paymentData) {
+    return new Promise((resolve, reject) => {
+        try {
+            // Verificar si el selector de fondos está disponible
+            if (typeof getFundSelector !== 'function') {
+                console.warn('FundSelector no disponible, procesando pago sin selector');
+                processPaymentWithoutFunds(paymentData, null).then(resolve).catch(reject);
+                return;
+            }
+            
+            // Obtener instancia del selector de fondos
+            const fundSelector = getFundSelector();
+            
+            // Obtener nombre del estudiante
+            const studentName = document.getElementById('studentSearchPayment')?.value || 'Cliente';
+            
+            // Configurar el selector para pagos (ingresos)
+            fundSelector.show({
+                totalAmount: paymentData.amount,
+                invoiceData: {
+                    concept: paymentData.concept || 'MONTHLY',
+                    studentId: paymentData.studentId,
+                    studentName: studentName,
+                    invoiceId: paymentData.invoiceId,
+                    type: 'OUTGOING' // Es una factura emitida (ingreso para nosotros)
+                },
+                onConfirm: async (fundSelections) => {
+                    try {
+                        // Procesar el pago con la información de fondos
+                        await processPaymentWithFunds(paymentData, fundSelections);
+                        resolve();
+                    } catch (error) {
+                        reject(error);
+                    }
+                }
+            });
+        } catch (error) {
+            reject(error);
+        }
+    });
+}
+
+// Procesar pago con información de fondos
+async function processPaymentWithFunds(paymentData, fundSelections) {
     try {
         showLoading();
         
-        const paymentId = paymentData.paymentId;
-        delete paymentData.paymentId;
+        // Crear el pago principal
+        const result = await api.createPayment(paymentData);
+        
+        // Obtener nombre del estudiante del campo de búsqueda
+        const studentName = document.getElementById('studentSearchPayment')?.value || 'Cliente';
+        
+        // Registrar las transacciones en los fondos seleccionados
+        for (const selection of fundSelections) {
+            await api.post(`/funds/${selection.fundId}/income`, {
+                amount: selection.amount,
+                description: `Pago recibido: ${studentName} - ${getConceptText(paymentData.concept || 'OTHER')}`,
+                reference: result.paymentNumber,
+                paymentId: result.id,
+                invoiceId: paymentData.invoiceId
+            });
+        }
+        
+        showNotification('Pago registrado exitosamente con trazabilidad de fondos', 'success');
+        
+        // Notificar cambios para actualizar dashboard
+        if (typeof window.notifyPaymentMade === 'function') {
+            window.notifyPaymentMade({
+                paymentId: result.id,
+                amount: paymentData.amount,
+                fundSelections: fundSelections
+            });
+        }
+        
+        // Cerrar modal y recargar datos
+        const modal = bootstrap.Modal.getInstance(document.getElementById('paymentModal'));
+        modal.hide();
+        
+        loadPayments(currentPaymentsPage, currentPaymentsFilters);
+        
+    } catch (error) {
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Procesar pago sin fondos (fallback)
+async function processPaymentWithoutFunds(paymentData, paymentId) {
+    try {
+        showLoading();
         
         if (paymentId) {
             // Update existing payment
@@ -300,7 +407,7 @@ async function savePayment() {
         const modal = bootstrap.Modal.getInstance(document.getElementById('paymentModal'));
         modal.hide();
         
-        loadPayments(currentPage, currentFilters);
+        loadPayments(currentPaymentsPage, currentPaymentsFilters);
         
     } catch (error) {
         handleApiError(error);
@@ -513,4 +620,19 @@ function initPayments() {
 // Show create payment modal
 function showCreatePaymentModal() {
     showPaymentModal(null, 'create');
+}
+
+// Get concept text for display
+function getConceptText(concept) {
+    const concepts = {
+        'TUITION': 'Matrícula',
+        'MONTHLY': 'Mensualidad',
+        'EVENT': 'Evento',
+        'UNIFORM': 'Uniforme',
+        'BOOKS': 'Libros',
+        'TRANSPORT': 'Transporte',
+        'CAFETERIA': 'Cafetería',
+        'OTHER': 'Otros'
+    };
+    return concepts[concept] || concept;
 }

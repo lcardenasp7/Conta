@@ -335,6 +335,291 @@ class API {
     }
 
     // ================================
+    // GESTIÓN DE FONDOS - NUEVOS ENDPOINTS
+    // ================================
+
+    // Fondos básicos
+    async getFunds(params = {}) {
+        console.log('📋 Getting funds with params:', params);
+        const queryString = new URLSearchParams(params).toString();
+        const response = await this.get(`/funds${queryString ? '?' + queryString : ''}`);
+        console.log(`✅ Retrieved ${response.funds?.length || 0} funds`);
+        return response;
+    }
+
+    async getFund(id) {
+        console.log('🔍 Getting fund:', id);
+        const response = await this.get(`/funds/${id}`);
+        console.log('✅ Fund retrieved with details');
+        return response.fund;
+    }
+
+    async createFund(data) {
+        console.log('📝 Creating fund:', data);
+        const response = await this.post('/funds', data);
+        console.log('✅ Fund created successfully');
+        return response.fund;
+    }
+
+    async updateFund(id, data) {
+        console.log('📝 Updating fund:', id, data);
+        const response = await this.put(`/funds/${id}`, data);
+        console.log('✅ Fund updated successfully');
+        return response.fund;
+    }
+
+    // Obtener fondos activos con saldo
+    async getActiveFunds() {
+        console.log('🔍 Getting active funds with balance');
+        const response = await this.getFunds({ 
+            isActive: 'true', 
+            withBalance: 'true' 
+        });
+        return response.funds || [];
+    }
+
+    // Operaciones de dinero en fondos
+    async addMoneyToFund(fundId, data) {
+        console.log('💰 Adding money to fund:', fundId, data);
+        const response = await this.post(`/funds/${fundId}/add-money`, data);
+        console.log('✅ Money added successfully');
+        return response;
+    }
+
+    async withdrawMoneyFromFund(fundId, data) {
+        console.log('💸 Withdrawing money from fund:', fundId, data);
+        const response = await this.post(`/funds/${fundId}/withdraw-money`, data);
+        console.log('✅ Money withdrawn successfully');
+        return response;
+    }
+
+    // Transacciones de fondos
+    async getFundTransactions(fundId, params = {}) {
+        console.log('📋 Getting fund transactions:', fundId);
+        const queryString = new URLSearchParams(params).toString();
+        const response = await this.get(`/funds/${fundId}/transactions${queryString ? '?' + queryString : ''}`);
+        console.log(`✅ Retrieved ${response.transactions?.length || 0} transactions`);
+        return response;
+    }
+
+    // Estadísticas de fondos
+    async getFundStatistics(fundId, period = '30') {
+        console.log('📊 Getting fund statistics:', fundId);
+        const response = await this.get(`/funds/${fundId}/statistics?period=${period}`);
+        console.log('✅ Fund statistics calculated');
+        return response.statistics;
+    }
+
+    // Dashboard de fondos
+    async getFundsDashboard() {
+        console.log('📊 Getting funds dashboard summary');
+        const response = await this.get('/funds/dashboard/summary');
+        console.log('✅ Dashboard summary generated');
+        return response.summary;
+    }
+
+    // ================================
+    // PRÉSTAMOS ENTRE FONDOS
+    // ================================
+
+    // Préstamos básicos
+    async getFundLoans(params = {}) {
+        console.log('📋 Getting fund loans with params:', params);
+        const queryString = new URLSearchParams(params).toString();
+        // Usar la ruta de fondos por ahora
+        const response = await this.get(`/funds/loans${queryString ? '?' + queryString : ''}`);
+        console.log(`✅ Retrieved ${response.loans?.length || 0} loans`);
+        return response;
+    }
+
+    async getFundLoan(id) {
+        console.log('🔍 Getting fund loan:', id);
+        const response = await this.get(`/fund-loans/${id}`);
+        console.log('✅ Loan retrieved with details');
+        return response.loan;
+    }
+
+    async createFundLoan(data) {
+        console.log('📝 Creating fund loan:', data);
+        const response = await this.post('/fund-loans', data);
+        console.log('✅ Loan request created');
+        return response;
+    }
+
+    // Gestión de aprobaciones
+    async getPendingLoanApprovals() {
+        console.log('⏳ Getting pending loan approvals');
+        const response = await this.get('/fund-loans/pending-approvals');
+        console.log(`✅ Found ${response.loans?.length || 0} pending loans`);
+        return response.loans || [];
+    }
+
+    async approveFundLoan(loanId, data = {}) {
+        console.log('✅ Approving fund loan:', loanId);
+        const response = await this.patch(`/fund-loans/${loanId}/approve`, data);
+        console.log('✅ Loan approved successfully');
+        return response.loan;
+    }
+
+    async rejectFundLoan(loanId, reason) {
+        console.log('❌ Rejecting fund loan:', loanId);
+        const response = await this.patch(`/fund-loans/${loanId}/reject`, { reason });
+        console.log('✅ Loan rejected');
+        return response.loan;
+    }
+
+    // Gestión de pagos de préstamos
+    async createLoanPayment(loanId, data) {
+        console.log('💳 Creating loan payment:', loanId, data);
+        const response = await this.post(`/fund-loans/${loanId}/payments`, data);
+        console.log('✅ Loan payment recorded');
+        return response;
+    }
+
+    async getLoanPaymentHistory(loanId) {
+        console.log('📋 Getting loan payment history:', loanId);
+        const response = await this.get(`/fund-loans/${loanId}/payments`);
+        console.log(`✅ Retrieved ${response.payments?.length || 0} payments`);
+        return response;
+    }
+
+    // Consultas especializadas de préstamos
+    async getOverdueLoans() {
+        console.log('⚠️ Getting overdue loans');
+        const response = await this.get('/fund-loans/overdue/list');
+        console.log(`✅ Found ${response.loans?.length || 0} overdue loans`);
+        return response.loans || [];
+    }
+
+    async getLoanStatistics(fundId = null) {
+        console.log('📊 Getting loan statistics');
+        const queryParams = fundId ? `?fundId=${fundId}` : '';
+        const response = await this.get(`/fund-loans/statistics/general${queryParams}`);
+        console.log('✅ Loan statistics calculated');
+        return response.statistics;
+    }
+
+    // Gestión administrativa de préstamos
+    async cancelFundLoan(loanId, reason) {
+        console.log('🚫 Cancelling fund loan:', loanId);
+        const response = await this.patch(`/fund-loans/${loanId}/cancel`, { reason });
+        console.log('✅ Loan cancelled');
+        return response.loan;
+    }
+
+    async updateLoanObservations(loanId, observations) {
+        console.log('📝 Updating loan observations:', loanId);
+        const response = await this.patch(`/fund-loans/${loanId}/observations`, { observations });
+        console.log('✅ Observations updated');
+        return response.loan;
+    }
+
+    async extendLoanDueDate(loanId, newDueDate, reason) {
+        console.log('📅 Extending loan due date:', loanId);
+        const response = await this.patch(`/fund-loans/${loanId}/extend-due-date`, {
+            newDueDate,
+            reason
+        });
+        console.log('✅ Due date extended');
+        return response.loan;
+    }
+
+    // Exportación de préstamos
+    async exportLoansToCSV(params = {}) {
+        console.log('📤 Exporting loans to CSV');
+        const queryString = new URLSearchParams(params).toString();
+        
+        const response = await fetch(`${API_BASE_URL}/fund-loans/export/csv${queryString ? '?' + queryString : ''}`, {
+            method: 'GET',
+            headers: this.getHeaders()
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al exportar préstamos');
+        }
+
+        // Descargar archivo
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `prestamos_fondos_${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        console.log('✅ CSV export completed');
+    }
+
+    // Sistema de alertas
+    async getFundAlertsAttentionRequired() {
+        console.log('🚨 Getting fund alerts requiring attention');
+        const response = await this.get('/fund-loans/alerts/attention-required');
+        console.log(`✅ Generated ${response.summary?.totalAlerts || 0} alerts`);
+        return response;
+    }
+
+    // ================================
+    // MÉTODOS DE UTILIDAD PARA FONDOS
+    // ================================
+
+    // Validar si un fondo puede prestar dinero
+    async canFundLend(fundId, amount) {
+        try {
+            const fund = await this.getFund(fundId);
+            const maxLoanAmount = Math.floor(fund.currentBalance * 0.30); // 30% máximo
+            
+            return {
+                canLend: fund.currentBalance >= amount && amount <= maxLoanAmount && fund.isActive,
+                availableBalance: fund.currentBalance,
+                maxLoanAmount,
+                shortfall: amount > fund.currentBalance ? amount - fund.currentBalance : 0,
+                exceedsLimit: amount > maxLoanAmount,
+                limitExcess: amount > maxLoanAmount ? amount - maxLoanAmount : 0
+            };
+        } catch (error) {
+            console.error('Error checking fund lending capacity:', error);
+            throw error;
+        }
+    }
+
+    // Obtener fondos disponibles para préstamo
+    async getFundsAvailableForLending(minimumAmount = 0) {
+        const response = await this.getFunds({ 
+            isActive: 'true', 
+            withBalance: 'true' 
+        });
+        
+        return (response.funds || []).filter(fund => {
+            const maxLoanAmount = Math.floor(fund.currentBalance * 0.30);
+            return maxLoanAmount >= minimumAmount;
+        });
+    }
+
+    // Formatear moneda
+    formatCurrency(amount) {
+        return new Intl.NumberFormat('es-CO', {
+            style: 'currency',
+            currency: 'COP',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
+        }).format(amount || 0);
+    }
+
+    // Calcular nivel de alerta de un fondo
+    calculateFundAlertLevel(fund) {
+        const usagePercentage = fund.initialBalance > 0 
+            ? Math.round(((fund.initialBalance - fund.currentBalance) / fund.initialBalance) * 100)
+            : 0;
+
+        if (usagePercentage >= 95) return { level: 'critical', percentage: usagePercentage };
+        if (usagePercentage >= 85) return { level: 'warning', percentage: usagePercentage };
+        if (usagePercentage >= 70) return { level: 'attention', percentage: usagePercentage };
+        return { level: 'safe', percentage: usagePercentage };
+    }
+
+    // ================================
     // EVENTOS - ENDPOINTS COMPLETOS
     // ================================
 
@@ -535,6 +820,88 @@ class API {
             hideLoading();
         }
     }
+
+    // ==========================================
+    // ACCIONES DE PRÉSTAMOS
+    // ==========================================
+    
+    // Aprobar préstamo
+    async approveLoan(loanId, approvalNotes = '') {
+        console.log(`✅ Aprobando préstamo: ${loanId}`);
+        return this.request(`/funds/loans/${loanId}/approve`, {
+            method: 'POST',
+            body: JSON.stringify({ approvalNotes })
+        });
+    }
+    
+    // Rechazar préstamo
+    async rejectLoan(loanId, rejectionReason) {
+        console.log(`❌ Rechazando préstamo: ${loanId}`);
+        return this.request(`/funds/loans/${loanId}/reject`, {
+            method: 'POST',
+            body: JSON.stringify({ rejectionReason })
+        });
+    }
+    
+    // Desembolsar préstamo
+    async disburseLoan(loanId, disbursementNotes = '') {
+        console.log(`💰 Desembolsando préstamo: ${loanId}`);
+        return this.request(`/funds/loans/${loanId}/disburse`, {
+            method: 'POST',
+            body: JSON.stringify({ disbursementNotes })
+        });
+    }
+    
+    // Crear préstamo
+    async createLoan(loanData) {
+        console.log('➕ Creando nuevo préstamo');
+        return this.request('/funds/loans', {
+            method: 'POST',
+            body: JSON.stringify(loanData)
+        });
+    }
+    
+    // ==========================================
+    // ACCIONES DE FONDOS
+    // ==========================================
+    
+    // Crear fondo
+    async createFund(fundData) {
+        console.log('➕ Creando nuevo fondo');
+        return this.request('/funds', {
+            method: 'POST',
+            body: JSON.stringify(fundData)
+        });
+    }
+    
+    // Actualizar fondo
+    async updateFund(fundId, fundData) {
+        console.log(`📝 Actualizando fondo: ${fundId}`);
+        return this.request(`/funds/${fundId}`, {
+            method: 'PUT',
+            body: JSON.stringify(fundData)
+        });
+    }
+    
+    // Cambiar estado del fondo
+    async toggleFundStatus(fundId, isActive) {
+        console.log(`🔄 Cambiando estado del fondo: ${fundId}`);
+        return this.request(`/funds/${fundId}/toggle-status`, {
+            method: 'PATCH',
+            body: JSON.stringify({ isActive })
+        });
+    }
+
+
+    // Validar transferencia entre fondos
+    async validateTransfer(sourceFundId, targetFundId, amount) {
+        console.log(`🔍 Validando transferencia: ${amount} de ${sourceFundId} a ${targetFundId}`);
+        return this.request('/funds/validate-transfer', {
+            method: 'POST',
+            body: JSON.stringify({ sourceFundId, targetFundId, amount })
+        });
+    }
+
 }
 
 // Create global API instance

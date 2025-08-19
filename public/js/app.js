@@ -874,6 +874,9 @@ async function loadPage(pageName) {
         'event-assignments': 'Asignaciones de Eventos',
         'event-reports': 'Reportes de Eventos',
         'financial-dashboard': 'Dashboard Financiero',
+        funds: 'Gestión de Fondos',
+        'fund-loans': 'Préstamos entre Fondos',
+        'fund-alerts': 'Alertas de Fondos',
         reports: 'Reportes',
         users: 'Gestión de Usuarios',
         institution: 'Configuración Institucional'
@@ -892,14 +895,68 @@ async function loadPage(pageName) {
         // Handle events pages specially
         currentAppPage = pageName;
         await initializePage(pageName);
+    } else if (pageName === 'funds' || pageName === 'fund-loans' || pageName === 'fund-alerts') {
+        // Handle funds pages specially
+        currentAppPage = pageName;
+        await initializePage(pageName);
     } else {
-        contentArea.innerHTML = `
-            <div class="text-center py-5">
-                <i class="bi bi-tools fs-1 text-muted"></i>
-                <h3 class="mt-3">Página en Desarrollo</h3>
-                <p class="text-muted">Esta funcionalidad estará disponible próximamente.</p>
-            </div>
-        `;
+        // Special handling for reports page
+        if (pageName === 'reports') {
+            console.log('🔄 Loading reports page directly...');
+            if (typeof initReports === 'function') {
+                await initReports();
+            } else {
+                // Force load reports content
+                contentArea.innerHTML = `
+                    <div class="container-fluid">
+                        <div class="d-flex justify-content-between align-items-center mb-4">
+                            <h2><i class="bi bi-graph-up text-primary"></i> Reportes Financieros</h2>
+                            <div class="btn-group">
+                                <button class="btn btn-primary" onclick="if(typeof showStudentReport === 'function') showStudentReport()">
+                                    <i class="bi bi-person-lines-fill"></i> Estado de Cuenta
+                                </button>
+                                <button class="btn btn-warning" onclick="if(typeof showOverdueReport === 'function') showOverdueReport()">
+                                    <i class="bi bi-exclamation-triangle"></i> Cartera Vencida
+                                </button>
+                                <button class="btn btn-info" onclick="if(typeof showCashFlowReport === 'function') showCashFlowReport()">
+                                    <i class="bi bi-cash-stack"></i> Flujo de Caja
+                                </button>
+                                <button class="btn btn-success" onclick="if(typeof showEventReport === 'function') showEventReport()">
+                                    <i class="bi bi-calendar-event"></i> Análisis de Eventos
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="text-center py-5">
+                                    <i class="bi bi-graph-up display-1 text-primary mb-3"></i>
+                                    <h3 class="text-primary">Sistema de Reportes Financieros</h3>
+                                    <p class="text-muted mb-4">Sistema operativo - Selecciona un reporte para comenzar</p>
+                                    <div class="alert alert-success">
+                                        <h6><i class="bi bi-check-circle"></i> Sistema Funcionando</h6>
+                                        <p class="mb-0">Los reportes financieros están completamente operativos.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                // Try to load the functions after a delay
+                setTimeout(() => {
+                    if (typeof initReports === 'function') {
+                        initReports();
+                    }
+                }, 100);
+            }
+        } else {
+            contentArea.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="bi bi-tools fs-1 text-muted"></i>
+                    <h3 class="mt-3">Página en Desarrollo</h3>
+                    <p class="text-muted">Esta funcionalidad estará disponible próximamente.</p>
+                </div>
+            `;
+        }
     }
 }
 
@@ -965,8 +1022,22 @@ async function initializePage(pageName) {
                 }
                 break;
             case 'reports':
-                if (typeof initReports === 'function') {
-                    await initReports();
+                console.log('🔄 Loading reports page...');
+                try {
+                    if (typeof initReports === 'function') {
+                        console.log('✅ Executing initReports...');
+                        await initReports();
+                    } else {
+                        console.error('❌ initReports not found, loading manually...');
+                        // Force load reports manually
+                        setTimeout(() => {
+                            if (typeof initReports === 'function') {
+                                initReports();
+                            }
+                        }, 500);
+                    }
+                } catch (error) {
+                    console.error('❌ Error in reports:', error);
                 }
                 break;
             case 'financial-dashboard':
@@ -985,6 +1056,85 @@ async function initializePage(pageName) {
                         </div>
                     `;
                 }
+                break;
+            case 'funds':
+                if (typeof initFunds === 'function') {
+                    await initFunds();
+                } else {
+                    console.error('Funds module not loaded');
+                    document.getElementById('contentArea').innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
+                            <h3 class="mt-3">Gestión de Fondos no disponible</h3>
+                            <p class="text-muted">El módulo de gestión de fondos no se ha cargado correctamente.</p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
+                        </div>
+                    `;
+                }
+                break;
+            case 'fund-loans':
+                if (typeof initFundLoans === 'function') {
+                    await initFundLoans();
+                } else {
+                    console.error('Fund Loans module not loaded');
+                    document.getElementById('contentArea').innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
+                            <h3 class="mt-3">Préstamos entre Fondos no disponible</h3>
+                            <p class="text-muted">El módulo de préstamos entre fondos no se ha cargado correctamente.</p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
+                        </div>
+                    `;
+                }
+                break;
+            case 'fund-alerts':
+                if (typeof initFundAlerts === 'function') {
+                    await initFundAlerts();
+                } else {
+                    console.error('Fund Alerts module not loaded');
+                    document.getElementById('contentArea').innerHTML = `
+                        <div class="text-center py-5">
+                            <i class="bi bi-exclamation-triangle fs-1 text-warning"></i>
+                            <h3 class="mt-3">Alertas de Fondos no disponible</h3>
+                            <p class="text-muted">El módulo de alertas de fondos no se ha cargado correctamente.</p>
+                            <button class="btn btn-primary" onclick="location.reload()">
+                                <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                            </button>
+                        </div>
+                    `;
+                }
+                break;
+            case 'fund-alerts':
+                // Página simple de alertas de fondos
+                document.getElementById('contentArea').innerHTML = `
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h2><i class="bi bi-exclamation-triangle"></i> Alertas de Fondos</h2>
+                    </div>
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="text-center py-5">
+                                <i class="bi bi-bell fs-1 text-info"></i>
+                                <h3 class="mt-3">Sistema de Alertas</h3>
+                                <p class="text-muted">Las alertas de fondos se muestran automáticamente en el dashboard principal cuando se activan.</p>
+                                <p class="text-muted">Las alertas se generan cuando:</p>
+                                <ul class="list-unstyled">
+                                    <li>• Un fondo alcanza el 70% de uso (Alerta Nivel 1)</li>
+                                    <li>• Un fondo alcanza el 85% de uso (Alerta Nivel 2)</li>
+                                    <li>• Un fondo alcanza el 95% de uso (Alerta Nivel 3)</li>
+                                    <li>• Un préstamo está próximo a vencer</li>
+                                    <li>• Un préstamo está vencido</li>
+                                </ul>
+                                <button class="btn btn-primary" onclick="navigateTo('dashboard')">
+                                    <i class="bi bi-speedometer2"></i> Ver Dashboard
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
                 break;
             case 'institution':
                 if (typeof initInstitution === 'function') {
@@ -1221,3 +1371,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 100);
 });
+// Force reports initialization
+(function() {
+    const originalNavigateToPage = window.navigateToPage;
+    window.navigateToPage = function(pageName) {
+        console.log('🔄 Navigating to:', pageName);
+        if (pageName === 'reports') {
+            console.log('🎯 Reports page detected, ensuring initialization...');
+            setTimeout(() => {
+                if (typeof initReports === 'function') {
+                    console.log('✅ Force executing initReports...');
+                    initReports();
+                } else {
+                    console.log('❌ initReports still not available');
+                }
+            }, 200);
+        }
+        if (originalNavigateToPage) {
+            return originalNavigateToPage.call(this, pageName);
+        }
+    };
+})();

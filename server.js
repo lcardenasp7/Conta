@@ -26,6 +26,8 @@ const reportRoutes = require('./routes/report.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const financialDashboardRoutes = require('./routes/financial-dashboard.routes');
 const invoiceVerificationRoutes = require('./routes/invoice-verification.routes');
+const fundsRoutes = require('./routes/funds');
+
 
 // Initialize Express app
 const app = express();
@@ -395,6 +397,7 @@ app.use('/api/accounts', accountRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/financial-dashboard', financialDashboardRoutes);
+app.use('/api/funds', fundsRoutes);
 app.use('/', invoiceVerificationRoutes); // Rutas de verificación sin prefijo /api
 
 // Static files for uploaded documents

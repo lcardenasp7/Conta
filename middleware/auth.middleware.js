@@ -138,7 +138,7 @@ const isRector = (req, res, next) => {
   next();
 };
 
-// Check if user can manage accounting
+// Check if user can manage accounting (incluye AUXILIAR)
 const canManageAccounting = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({
@@ -146,7 +146,7 @@ const canManageAccounting = (req, res, next) => {
     });
   }
 
-  const allowedRoles = ['RECTOR', 'ACCOUNTANT', 'AUXILIARY_ACCOUNTANT', 'ADMIN'];
+  const allowedRoles = ['RECTOR', 'ACCOUNTANT', 'AUXILIARY_ACCOUNTANT', 'ADMIN', 'AUXILIAR', 'CONTADOR'];
   
   if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({
@@ -233,6 +233,62 @@ const canManageInstitution = (req, res, next) => {
   next();
 };
 
+// Check if user can approve large fund loans (>$1,000,000)
+const canApproveLargeLoans = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'No autenticado'
+    });
+  }
+
+  // Solo RECTOR y ADMIN pueden aprobar préstamos grandes
+  const allowedRoles = ['RECTOR', 'ADMIN'];
+  
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({
+      error: 'Solo el rector puede aprobar préstamos superiores a $1,000,000',
+      requiredRoles: allowedRoles,
+      userRole: req.user.role
+    });
+  }
+
+  next();
+};
+
+// Check if user can manage fund transfers
+const canManageFundTransfers = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'No autenticado'
+    });
+  }
+
+  // Roles que pueden manejar transferencias entre fondos
+  const allowedRoles = ['RECTOR', 'ACCOUNTANT', 'AUXILIARY_ACCOUNTANT', 'ADMIN'];
+  
+  if (!allowedRoles.includes(req.user.role)) {
+    return res.status(403).json({
+      error: 'No tiene permisos para gestionar transferencias de fondos',
+      requiredRoles: allowedRoles,
+      userRole: req.user.role
+    });
+  }
+
+  next();
+};
+
+// Check if user can view fund details
+const canViewFunds = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      error: 'No autenticado'
+    });
+  }
+
+  // Todos los usuarios autenticados pueden ver fondos, pero con diferentes niveles de detalle
+  next();
+};
+
 module.exports = {
   authenticateToken,
   authorizeRoles,
@@ -242,5 +298,9 @@ module.exports = {
   canManageStudents,
   canViewReports,
   canManageInstitution,
-  logActivity
+  logActivity,
+  // NUEVAS FUNCIONES PARA GESTIÓN DE FONDOS
+  canApproveLargeLoans,
+  canManageFundTransfers,
+  canViewFunds
 };

@@ -23,6 +23,9 @@ async function login(email, password) {
             api.setToken(response.token);
             localStorage.setItem('user', JSON.stringify(response.user));
             
+            // NUEVO: Iniciar timer de inactividad
+            resetInactivityTimer();
+            
             // Show success message
             showNotification('¡Bienvenido al sistema!', 'success');
             
@@ -52,6 +55,16 @@ async function logout() {
     } catch (error) {
         console.error('Logout error:', error);
     } finally {
+        // NUEVO: Limpiar timers
+        clearTimeout(inactivityTimer);
+        clearInterval(sessionDisplayTimer);
+        
+        // Ocultar indicador de sesión
+        const sessionIndicator = document.getElementById('sessionIndicator');
+        if (sessionIndicator) {
+            sessionIndicator.classList.add('d-none');
+        }
+        
         // Clear local storage
         api.removeToken();
         localStorage.removeItem('user');
@@ -88,10 +101,21 @@ function showDashboard() {
         document.getElementById('userName').textContent = user.name;
     }
     
-    // Load dashboard content
-    if (typeof loadPage === 'function') {
-        loadPage('dashboard');
-    }
+    // NUEVO: Forzar actualización de la interfaz
+    setTimeout(() => {
+        // Activar menús y botones
+        enableNavigation();
+        
+        // Load dashboard content
+        if (typeof loadPage === 'function') {
+            loadPage('dashboard');
+        }
+        
+        // Forzar re-render de elementos
+        document.body.style.display = 'none';
+        document.body.offsetHeight; // Trigger reflow
+        document.body.style.display = '';
+    }, 100);
 }
 
 // Initialize authentication
@@ -157,6 +181,144 @@ function requirePermission(permission, callback) {
     }
 }
 
+// NUEVO: Activar navegación después del login
+function enableNavigation() {
+    // Activar todos los enlaces de navegación
+    const navLinks = document.querySelectorAll('.nav-link, .navbar-nav a, .btn');
+    navLinks.forEach(link => {
+        link.style.pointerEvents = 'auto';
+        link.classList.remove('disabled');
+    });
+    
+    // Activar menús desplegables
+    const dropdowns = document.querySelectorAll('.dropdown-toggle');
+    dropdowns.forEach(dropdown => {
+        dropdown.removeAttribute('disabled');
+    });
+    
+    // Forzar actualización de Bootstrap components
+    if (typeof bootstrap !== 'undefined') {
+        // Re-inicializar tooltips y popovers
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+}
+
+// NUEVO: Sistema de timeout por inactividad
+let inactivityTimer;
+let sessionDisplayTimer;
+let sessionStartTime;
+let sessionTimeout = 30 * 60 * 1000; // 30 minutos en milisegundos
+let warningTimeout = 25 * 60 * 1000; // 25 minutos para mostrar advertencia
+
+function resetInactivityTimer() {
+    clearTimeout(inactivityTimer);
+    
+    if (isAuthenticated()) {
+        // NUEVO: Reiniciar tiempo de sesión
+        sessionStartTime = Date.now();
+        updateSessionDisplay();
+        
+        // Timer para mostrar advertencia
+        setTimeout(() => {
+            if (isAuthenticated()) {
+                showSessionWarning();
+            }
+        }, warningTimeout);
+        
+        // Timer para cerrar sesión
+        inactivityTimer = setTimeout(() => {
+            if (isAuthenticated()) {
+                showNotification('Sesión cerrada por inactividad', 'warning');
+                logout();
+            }
+        }, sessionTimeout);
+    }
+}
+
+// NUEVO: Actualizar display del tiempo de sesión
+function updateSessionDisplay() {
+    const sessionIndicator = document.getElementById('sessionIndicator');
+    const sessionTimer = document.getElementById('sessionTimer');
+    
+    if (!sessionIndicator || !sessionTimer || !isAuthenticated()) {
+        return;
+    }
+    
+    // Mostrar indicador
+    sessionIndicator.classList.remove('d-none');
+    
+    // Limpiar timer anterior
+    clearInterval(sessionDisplayTimer);
+    
+    // Actualizar cada segundo
+    sessionDisplayTimer = setInterval(() => {
+        if (!isAuthenticated()) {
+            clearInterval(sessionDisplayTimer);
+            sessionIndicator.classList.add('d-none');
+            return;
+        }
+        
+        const elapsed = Date.now() - sessionStartTime;
+        const remaining = Math.max(0, sessionTimeout - elapsed);
+        
+        const minutes = Math.floor(remaining / 60000);
+        const seconds = Math.floor((remaining % 60000) / 1000);
+        
+        sessionTimer.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
+        // Cambiar color según tiempo restante
+        if (remaining < 5 * 60 * 1000) { // Menos de 5 minutos
+            sessionTimer.className = 'text-danger fw-bold';
+        } else if (remaining < 10 * 60 * 1000) { // Menos de 10 minutos
+            sessionTimer.className = 'text-warning';
+        } else {
+            sessionTimer.className = 'text-muted';
+        }
+        
+        if (remaining <= 0) {
+            clearInterval(sessionDisplayTimer);
+        }
+    }, 1000);
+}
+
+// NUEVO: Extender sesión manualmente
+function extendSession() {
+    if (isAuthenticated()) {
+        resetInactivityTimer();
+        showNotification('Sesión extendida por 30 minutos más', 'success');
+    }
+}
+
+// NUEVO: Mostrar advertencia de sesión
+function showSessionWarning() {
+    const remainingTime = Math.ceil((sessionTimeout - warningTimeout) / 1000 / 60); // minutos restantes
+    
+    if (confirm(`Su sesión expirará en ${remainingTime} minutos por inactividad. ¿Desea continuar?`)) {
+        // Usuario quiere continuar, reiniciar timer
+        resetInactivityTimer();
+        showNotification('Sesión extendida', 'success');
+    } else {
+        // Usuario no responde o cancela, cerrar sesión
+        logout();
+    }
+}
+
+// NUEVO: Detectar actividad del usuario
+function setupActivityDetection() {
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    
+    events.forEach(event => {
+        document.addEventListener(event, () => {
+            if (isAuthenticated()) {
+                resetInactivityTimer();
+            }
+        }, true);
+    });
+}
+
 // Auto-logout on token expiration
 function setupAutoLogout() {
     // Check token validity every 5 minutes
@@ -179,4 +341,10 @@ function setupAutoLogout() {
 document.addEventListener('DOMContentLoaded', () => {
     initAuth();
     setupAutoLogout();
+    setupActivityDetection(); // NUEVO: Detectar actividad del usuario
+    
+    // NUEVO: Iniciar timer de inactividad si ya está autenticado
+    if (isAuthenticated()) {
+        resetInactivityTimer();
+    }
 });

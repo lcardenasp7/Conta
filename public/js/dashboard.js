@@ -276,6 +276,12 @@ function getEventStatusText(status) {
 // Load dashboard charts
 async function loadDashboardCharts() {
     try {
+        // Destroy all existing charts first
+        destroyAllCharts();
+        
+        // Small delay to ensure charts are destroyed
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Load income vs expense chart
         await loadIncomeExpenseChart();
 
@@ -287,15 +293,37 @@ async function loadDashboardCharts() {
     }
 }
 
+// Destroy all existing charts
+function destroyAllCharts() {
+    if (window.incomeExpenseChart) {
+        window.incomeExpenseChart.destroy();
+        window.incomeExpenseChart = null;
+    }
+    
+    if (window.incomeDistributionChart) {
+        window.incomeDistributionChart.destroy();
+        window.incomeDistributionChart = null;
+    }
+    
+    // Clear any Chart.js instances from the registry
+    Object.keys(Chart.instances).forEach(key => {
+        Chart.instances[key].destroy();
+    });
+}
+
 // Load income vs expense chart
 async function loadIncomeExpenseChart() {
     const ctx = document.getElementById('incomeExpenseChart');
     if (!ctx) return;
 
-    // Destroy existing chart
-    if (incomeExpenseChart) {
-        incomeExpenseChart.destroy();
+    // Destroy existing chart more thoroughly
+    if (window.incomeExpenseChart) {
+        window.incomeExpenseChart.destroy();
+        window.incomeExpenseChart = null;
     }
+    
+    // Clear the canvas
+    ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
 
     try {
         // Try to get real data from API
@@ -326,7 +354,7 @@ async function loadIncomeExpenseChart() {
             ]
         };
 
-        incomeExpenseChart = new Chart(ctx, {
+        window.incomeExpenseChart = new Chart(ctx, {
             type: 'line',
             data: data,
             options: {
@@ -434,10 +462,14 @@ async function loadIncomeDistributionChart() {
     const ctx = document.getElementById('incomeDistributionChart');
     if (!ctx) return;
 
-    // Destroy existing chart
-    if (incomeDistributionChart) {
-        incomeDistributionChart.destroy();
+    // Destroy existing chart more thoroughly
+    if (window.incomeDistributionChart) {
+        window.incomeDistributionChart.destroy();
+        window.incomeDistributionChart = null;
     }
+    
+    // Clear the canvas
+    ctx.getContext('2d').clearRect(0, 0, ctx.width, ctx.height);
 
     try {
         // Get current dashboard stats to use income categories
@@ -460,7 +492,7 @@ async function loadIncomeDistributionChart() {
             }]
         };
 
-        incomeDistributionChart = new Chart(ctx, {
+        window.incomeDistributionChart = new Chart(ctx, {
             type: 'doughnut',
             data: data,
             options: {
@@ -519,7 +551,7 @@ function loadSampleIncomeDistributionChart(ctx) {
         }]
     };
 
-    incomeDistributionChart = new Chart(ctx, {
+    window.incomeDistributionChart = new Chart(ctx, {
         type: 'doughnut',
         data: data,
         options: {

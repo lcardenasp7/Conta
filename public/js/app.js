@@ -854,6 +854,9 @@ async function loadPage(pageName) {
     
     if (!contentArea || !pageTitle) return;
     
+    // NUEVO: Limpiar gráficos existentes antes de cambiar de página
+    cleanupCharts();
+    
     // Clear any hash from URL
     if (window.location.hash) {
         history.replaceState(null, null, window.location.pathname + window.location.search);
@@ -1392,3 +1395,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 })();
+
+// NUEVO: Función para limpiar gráficos de Chart.js
+function cleanupCharts() {
+    try {
+        // Limpiar gráficos del dashboard
+        if (window.incomeExpenseChart) {
+            window.incomeExpenseChart.destroy();
+            window.incomeExpenseChart = null;
+        }
+        
+        if (window.incomeDistributionChart) {
+            window.incomeDistributionChart.destroy();
+            window.incomeDistributionChart = null;
+        }
+        
+        // Limpiar cualquier instancia de Chart.js que pueda quedar
+        if (typeof Chart !== 'undefined' && Chart.instances) {
+            Object.keys(Chart.instances).forEach(key => {
+                try {
+                    Chart.instances[key].destroy();
+                } catch (e) {
+                    // Ignorar errores de gráficos ya destruidos
+                }
+            });
+        }
+        
+        // Limpiar canvas elements
+        const canvasElements = document.querySelectorAll('canvas');
+        canvasElements.forEach(canvas => {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            }
+        });
+        
+    } catch (error) {
+        console.log('Error cleaning up charts:', error);
+    }
+}

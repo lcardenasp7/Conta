@@ -101,10 +101,26 @@ function showDashboard() {
         document.getElementById('userName').textContent = user.name;
     }
     
-    // NUEVO: Forzar actualización de la interfaz
-    setTimeout(() => {
+    // NUEVO: Forzar actualización de la interfaz con múltiples intentos
+    let attempts = 0;
+    const maxAttempts = 3;
+    
+    const enableNavigationWithRetry = () => {
+        attempts++;
+        console.log(`🔧 Intento ${attempts} de activar navegación...`);
+        
         // Activar menús y botones
         enableNavigation();
+        
+        // Verificar si la navegación está funcionando
+        const testElement = document.querySelector('.menu-item[data-page]');
+        if (testElement && testElement.style.pointerEvents !== 'none' && attempts < maxAttempts) {
+            console.log('✅ Navegación activada correctamente');
+        } else if (attempts < maxAttempts) {
+            console.log('⚠️ Reintentando activación de navegación...');
+            setTimeout(enableNavigationWithRetry, 200);
+            return;
+        }
         
         // Load dashboard content
         if (typeof loadPage === 'function') {
@@ -115,7 +131,11 @@ function showDashboard() {
         document.body.style.display = 'none';
         document.body.offsetHeight; // Trigger reflow
         document.body.style.display = '';
-    }, 100);
+        
+        console.log('🎉 Dashboard cargado y navegación activada');
+    };
+    
+    setTimeout(enableNavigationWithRetry, 100);
 }
 
 // Initialize authentication
@@ -183,18 +203,33 @@ function requirePermission(permission, callback) {
 
 // NUEVO: Activar navegación después del login
 function enableNavigation() {
+    console.log('🔧 Activando navegación...');
+    
     // Activar todos los enlaces de navegación
-    const navLinks = document.querySelectorAll('.nav-link, .navbar-nav a, .btn');
+    const navLinks = document.querySelectorAll('.nav-link, .navbar-nav a, .btn, .menu-item, .submenu-item');
     navLinks.forEach(link => {
         link.style.pointerEvents = 'auto';
         link.classList.remove('disabled');
+        link.removeAttribute('disabled');
     });
     
     // Activar menús desplegables
     const dropdowns = document.querySelectorAll('.dropdown-toggle');
     dropdowns.forEach(dropdown => {
         dropdown.removeAttribute('disabled');
+        dropdown.style.pointerEvents = 'auto';
     });
+    
+    // Activar elementos del sidebar
+    const sidebarElements = document.querySelectorAll('.sidebar .menu-item, .sidebar .submenu-item');
+    sidebarElements.forEach(element => {
+        element.style.pointerEvents = 'auto';
+        element.classList.remove('disabled');
+        element.removeAttribute('disabled');
+    });
+    
+    // Re-establecer event listeners de navegación
+    setupNavigationEventListeners();
     
     // Forzar actualización de Bootstrap components
     if (typeof bootstrap !== 'undefined') {
@@ -203,6 +238,29 @@ function enableNavigation() {
         tooltipTriggerList.map(function (tooltipTriggerEl) {
             return new bootstrap.Tooltip(tooltipTriggerEl);
         });
+    }
+    
+    console.log('✅ Navegación activada');
+}
+
+// NUEVO: Re-establecer event listeners de navegación
+function setupNavigationEventListeners() {
+    // Event listeners para elementos del menú
+    const menuItems = document.querySelectorAll('[data-page]');
+    menuItems.forEach(item => {
+        // Remover listeners existentes
+        item.removeEventListener('click', handleMenuClick);
+        // Agregar nuevos listeners
+        item.addEventListener('click', handleMenuClick);
+    });
+}
+
+// NUEVO: Manejar clicks del menú
+function handleMenuClick(e) {
+    e.preventDefault();
+    const pageName = e.currentTarget.getAttribute('data-page');
+    if (pageName && typeof loadPage === 'function') {
+        loadPage(pageName);
     }
 }
 

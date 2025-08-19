@@ -168,31 +168,12 @@ async function loadFundAlerts(page = 1, filters = {}) {
             ...filters
         };
         
-        // Simular datos de alertas por ahora
-        const mockAlerts = [
-            {
-                id: '1',
-                fund: { name: 'Fondo de Eventos', code: 'EVE2025' },
-                level: 2,
-                percentage: 87.5,
-                message: 'El fondo ha alcanzado el 87.5% de uso',
-                isRead: false,
-                triggeredAt: new Date().toISOString()
-            },
-            {
-                id: '2',
-                fund: { name: 'Fondo Operacional', code: 'OPE2025' },
-                level: 1,
-                percentage: 72.3,
-                message: 'El fondo ha alcanzado el 72.3% de uso',
-                isRead: true,
-                triggeredAt: new Date(Date.now() - 86400000).toISOString()
-            }
-        ];
+        // Usar datos reales de la API
+        const alerts = response || [];
         
-        currentFundAlerts = mockAlerts;
+        currentFundAlerts = alerts;
         currentFundAlertsPage = 1;
-        totalFundAlertsPages = 1;
+        totalFundAlertsPages = Math.ceil(alerts.length / 20) || 1;
         currentFundAlertsFilters = filters;
         
         updateFundAlertsDisplay();

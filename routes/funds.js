@@ -18,8 +18,26 @@ console.log('📋 Cargando rutas de fondos (versión limpia)...');
 // GET /api/funds - Obtener todos los fondos
 router.get('/', authenticateToken, async (req, res) => {
     try {
+        const { page = 1, limit = 20, type, isActive, academicYear } = req.query;
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Build where clause
+        const where = {};
+        if (type) where.type = type;
+        if (isActive !== undefined) where.isActive = isActive === 'true';
+        if (academicYear) where.academicYear = parseInt(academicYear);
+
+        // Get total count for pagination
+        const total = await prisma.fund.count({ where });
+
+        // Get funds with pagination
         const funds = await prisma.fund.findMany({
+            where,
             orderBy: { createdAt: 'desc' },
+            skip,
+            take: limitNum,
             include: {
                 _count: {
                     select: {
@@ -30,7 +48,20 @@ router.get('/', authenticateToken, async (req, res) => {
             }
         });
 
-        res.json(funds);
+        // Calculate pagination info
+        const totalPages = Math.ceil(total / limitNum);
+
+        res.json({
+            funds,
+            pagination: {
+                page: pageNum,
+                limit: limitNum,
+                total,
+                pages: totalPages,
+                hasNext: pageNum < totalPages,
+                hasPrev: pageNum > 1
+            }
+        });
     } catch (error) {
         console.error('Error al obtener fondos:', error);
         res.status(500).json({ error: 'Error al obtener fondos' });

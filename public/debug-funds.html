@@ -69,6 +69,9 @@
                         <button class="btn btn-warning btn-debug" onclick="createSampleFunds(true)">
                             Recrear Fondos (Limpiar + Crear)
                         </button>
+                        <button class="btn btn-danger btn-debug" onclick="clearTestFundBalances()">
+                            Limpiar Saldos de Prueba
+                        </button>
                     </div>
                 </div>
             </div>
@@ -104,6 +107,7 @@
                         <li><strong>Diagnosticar Fondos:</strong> Revisa el estado actual de los fondos</li>
                         <li><strong>Crear Fondos de Ejemplo:</strong> Crea fondos de prueba si no existen</li>
                         <li><strong>Recrear Fondos:</strong> Elimina todos los fondos existentes y crea nuevos</li>
+                        <li><strong>Limpiar Saldos de Prueba:</strong> Pone en $0 los fondos que parecen de prueba</li>
                     </ul>
                 </div>
             </div>
@@ -185,6 +189,13 @@
 
         async function createSampleFunds(clearExisting = false) {
             await apiRequest('/create-sample-funds', 'POST', { clearExisting });
+        }
+
+        async function clearTestFundBalances() {
+            if (!confirm('¿Estás seguro de que quieres limpiar los saldos de los fondos de prueba?\n\nEsto pondrá en $0 todos los fondos que tengan "PRUEBA", "TEST" o "DEMO" en su nombre.')) {
+                return;
+            }
+            await apiRequest('/clear-test-fund-balance', 'POST', {});
         }
 
         // Verificar autenticación al cargar la página

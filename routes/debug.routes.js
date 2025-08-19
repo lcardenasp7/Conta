@@ -175,6 +175,148 @@ router.get('/database', authenticateToken, async (req, res) => {
     }
 });
 
+// POST /api/debug/clear-test-fund-balance - Limpiar saldo de fondos de prueba
+router.post('/clear-test-fund-balance', authenticateToken, async (req, res) => {
+    try {
+        const { fundId, clearAll } = req.body;
+        console.log('🧹 Limpiando saldos de fondos de prueba...');
+
+        let fundsToProcess = [];
+
+        if (fundId) {
+            // Limpiar un fondo específico
+            const fund = await prisma.fund.findUnique({
+                where: { id: fundId }
+            });
+
+            if (!fund) {
+                return res.status(404).json({
+                    success: false,
+                    error: 'Fondo no encontrado'
+                });
+            }
+
+            fundsToProcess = [fund];
+        } else if (clearAll) {
+            // Limpiar todos los fondos con saldo positivo
+            fundsToProcess = await prisma.fund.findMany({
+                where: {
+                    currentBalance: { gt: 0 }
+                }
+            });
+        } else {
+            // Limpiar solo fondos de prueba
+            fundsToProcess = await prisma.fund.findMany({
+                where: {
+                    AND: [
+                        { currentBalance: { gt: 0 } },
+                        {
+                            OR: [
+                                { name: { contains: 'PRUEBA', mode: 'insensitive' } },
+                                { name: { contains: 'TEST', mode: 'insensitive' } },
+                                { name: { contains: 'DEMO', mode: 'insensitive' } },
+                                { code: { contains: 'PRUEB', mode: 'insensitive' } },
+                                { code: { contains: 'TEST', mode: 'insensitive' } },
+                                { code: { contains: 'DEMO', mode: 'insensitive' } }
+                            ]
+                        }
+                    ]
+                }
+            });
+        }
+
+        if (fundsToProcess.length === 0) {
+            return res.json({
+                success: true,
+                message: 'No se encontraron fondos para limpiar',
+                data: {
+                    fundsProcessed: 0,
+                    totalCleared: 0
+                }
+            });
+        }
+
+        const results = [];
+        let totalCleared = 0;
+
+        for (const fund of fundsToProcess) {
+            if (fund.currentBalance <= 0) {
+                results.push({
+                    fundName: fund.name,
+                    fundCode: fund.code,
+                    status: 'skipped',
+                    reason: 'Saldo ya es cero o negativo',
+                    balanceCleared: 0
+                });
+                continue;
+            }
+
+            try {
+                // Crear transacción de ajuste
+                const transaction = await prisma.fundTransaction.create({
+                    data: {
+                        fundId: fund.id,
+                        type: 'EXPENSE',
+                        amount: -fund.currentBalance,
+                        description: `Eliminación de saldo de prueba - ${fund.name} (via debug tools)`,
+                        category: 'ADMINISTRATIVE_ADJUSTMENT',
+                        performedBy: req.user.userId
+                    }
+                });
+
+                // Actualizar el fondo
+                await prisma.fund.update({
+                    where: { id: fund.id },
+                    data: {
+                        currentBalance: 0,
+                        totalExpenses: fund.totalExpenses + fund.currentBalance
+                    }
+                });
+
+                results.push({
+                    fundName: fund.name,
+                    fundCode: fund.code,
+                    status: 'cleared',
+                    balanceCleared: fund.currentBalance,
+                    transactionId: transaction.id
+                });
+
+                totalCleared += fund.currentBalance;
+                console.log(`✅ Limpiado: ${fund.name} - $${fund.currentBalance}`);
+
+            } catch (error) {
+                console.log(`❌ Error limpiando ${fund.name}:`, error.message);
+                results.push({
+                    fundName: fund.name,
+                    fundCode: fund.code,
+                    status: 'error',
+                    error: error.message,
+                    balanceCleared: 0
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Proceso completado. ${results.filter(r => r.status === 'cleared').length} fondos limpiados`,
+            data: {
+                fundsProcessed: results.length,
+                fundsCleared: results.filter(r => r.status === 'cleared').length,
+                totalCleared: totalCleared,
+                results: results
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error limpiando saldos:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al limpiar saldos de fondos',
+            details: error.message
+        });
+    }
+});
+
 // POST /api/debug/create-sample-funds - Crear fondos de ejemplo
 router.post('/create-sample-funds', authenticateToken, async (req, res) => {
     try {

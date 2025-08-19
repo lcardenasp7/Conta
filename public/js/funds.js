@@ -1008,6 +1008,7 @@ window.exportFunds = exportFunds;
 window.deleteFund = deleteFund;
 window.toggleFundStatus = toggleFundStatus;
 window.showTransferFromFund = showTransferFromFund;
+window.showBalanceAdjustmentModal = showBalanceAdjustmentModal;
 
 // Delete fund
 async function deleteFund(fundId, fundName) {
@@ -1212,6 +1213,9 @@ function showDeleteFundWithHistoryModal(fundId, fundName, fund) {
                             <button type="button" class="btn btn-primary" onclick="showTransferFromFund('${fundId}')">
                                 <i class="bi bi-arrow-right"></i> Transferir Saldo
                             </button>
+                            <button type="button" class="btn btn-warning" onclick="showBalanceAdjustmentModal('${fundId}', '${fundName}', ${fund.currentBalance})">
+                                <i class="bi bi-gear"></i> Ajuste de Saldo
+                            </button>
                         ` : ''}
                         <button type="button" class="btn btn-warning" onclick="toggleFundStatus('${fundId}', ${fund.isActive})">
                             <i class="bi bi-power"></i> ${fund.isActive ? 'Desactivar' : 'Activar'} Fondo
@@ -1297,6 +1301,191 @@ async function toggleFundStatus(fundId, currentStatus) {
 
     } catch (error) {
         console.error('Error updating fund status:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}// Adminis
+trative balance adjustment
+function showBalanceAdjustmentModal(fundId, fundName, currentBalance) {
+    const modalHTML = `
+        <div class="modal fade" id="balanceAdjustmentModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">⚙️ Ajuste Administrativo de Saldo</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <strong>Fondo:</strong> ${fundName}<br>
+                            <strong>Saldo actual:</strong> ${formatCurrency(currentBalance)}
+                        </div>
+
+                        <p><strong>Esta función permite ajustar el saldo del fondo por razones administrativas.</strong></p>
+
+                        <form id="balanceAdjustmentForm">
+                            <div class="mb-3">
+                                <label for="adjustmentType" class="form-label">Tipo de Ajuste *</label>
+                                <select class="form-select" id="adjustmentType" required>
+                                    <option value="">Seleccionar tipo</option>
+                                    <option value="ZERO_BALANCE">Poner saldo en cero</option>
+                                    <option value="SPECIFIC_AMOUNT">Ajustar a monto específico</option>
+                                    <option value="ADD_SUBTRACT">Sumar o restar monto</option>
+                                </select>
+                            </div>
+
+                            <div class="mb-3" id="specificAmountDiv" style="display: none;">
+                                <label for="specificAmount" class="form-label">Nuevo Saldo</label>
+                                <input type="number" class="form-control" id="specificAmount" step="0.01">
+                            </div>
+
+                            <div class="mb-3" id="addSubtractDiv" style="display: none;">
+                                <label for="adjustmentAmount" class="form-label">Monto del Ajuste</label>
+                                <div class="input-group">
+                                    <select class="form-select" id="adjustmentOperation" style="max-width: 100px;">
+                                        <option value="add">Sumar</option>
+                                        <option value="subtract">Restar</option>
+                                    </select>
+                                    <input type="number" class="form-control" id="adjustmentAmount" step="0.01" min="0">
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="adjustmentReason" class="form-label">Razón del Ajuste *</label>
+                                <textarea class="form-control" id="adjustmentReason" rows="3" required 
+                                    placeholder="Explique la razón del ajuste administrativo..."></textarea>
+                            </div>
+
+                            <div class="alert alert-warning">
+                                <strong>⚠️ Advertencia:</strong> Este ajuste quedará registrado en el historial de transacciones del fondo.
+                            </div>
+
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="confirmAdjustment" required>
+                                <label class="form-check-label" for="confirmAdjustment">
+                                    Confirmo que tengo autorización para realizar este ajuste administrativo
+                                </label>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-warning" onclick="processBalanceAdjustment('${fundId}', '${fundName}', ${currentBalance})">
+                            <i class="bi bi-gear"></i> Realizar Ajuste
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('balanceAdjustmentModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Setup form handlers
+    const adjustmentType = document.getElementById('adjustmentType');
+    const specificAmountDiv = document.getElementById('specificAmountDiv');
+    const addSubtractDiv = document.getElementById('addSubtractDiv');
+
+    adjustmentType.addEventListener('change', function() {
+        specificAmountDiv.style.display = this.value === 'SPECIFIC_AMOUNT' ? 'block' : 'none';
+        addSubtractDiv.style.display = this.value === 'ADD_SUBTRACT' ? 'block' : 'none';
+        
+        if (this.value === 'ZERO_BALANCE') {
+            document.getElementById('adjustmentReason').value = 'Ajuste administrativo para poner saldo en cero antes de eliminar fondo';
+        }
+    });
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('balanceAdjustmentModal'));
+    modal.show();
+
+    // Clean up when modal is hidden
+    document.getElementById('balanceAdjustmentModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Process balance adjustment
+async function processBalanceAdjustment(fundId, fundName, currentBalance) {
+    const form = document.getElementById('balanceAdjustmentForm');
+    if (!form || !validateForm(form)) {
+        showNotification('Por favor complete todos los campos requeridos', 'error');
+        return;
+    }
+
+    const adjustmentType = document.getElementById('adjustmentType').value;
+    const specificAmount = parseFloat(document.getElementById('specificAmount').value) || 0;
+    const adjustmentAmount = parseFloat(document.getElementById('adjustmentAmount').value) || 0;
+    const adjustmentOperation = document.getElementById('adjustmentOperation').value;
+    const reason = document.getElementById('adjustmentReason').value;
+    const confirmed = document.getElementById('confirmAdjustment').checked;
+
+    if (!confirmed) {
+        showNotification('Debe confirmar que tiene autorización para realizar este ajuste', 'error');
+        return;
+    }
+
+    let newBalance = currentBalance;
+    let transactionAmount = 0;
+    let description = reason;
+
+    // Calculate new balance and transaction amount
+    switch (adjustmentType) {
+        case 'ZERO_BALANCE':
+            newBalance = 0;
+            transactionAmount = -currentBalance;
+            description = `Ajuste administrativo a saldo cero: ${reason}`;
+            break;
+        case 'SPECIFIC_AMOUNT':
+            newBalance = specificAmount;
+            transactionAmount = specificAmount - currentBalance;
+            description = `Ajuste administrativo a ${formatCurrency(specificAmount)}: ${reason}`;
+            break;
+        case 'ADD_SUBTRACT':
+            if (adjustmentOperation === 'add') {
+                newBalance = currentBalance + adjustmentAmount;
+                transactionAmount = adjustmentAmount;
+                description = `Ajuste administrativo +${formatCurrency(adjustmentAmount)}: ${reason}`;
+            } else {
+                newBalance = currentBalance - adjustmentAmount;
+                transactionAmount = -adjustmentAmount;
+                description = `Ajuste administrativo -${formatCurrency(adjustmentAmount)}: ${reason}`;
+            }
+            break;
+    }
+
+    const transactionData = {
+        fundId,
+        type: transactionAmount >= 0 ? 'INCOME' : 'EXPENSE',
+        amount: transactionAmount,
+        description,
+        category: 'ADMINISTRATIVE_ADJUSTMENT'
+    };
+
+    try {
+        showLoading();
+
+        await api.createFundTransaction(transactionData);
+        
+        showNotification(`Ajuste administrativo realizado exitosamente. Nuevo saldo: ${formatCurrency(newBalance)}`, 'success');
+
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('balanceAdjustmentModal'));
+        modal.hide();
+
+        // Reload funds list
+        loadFunds(currentFundsPage, currentFundsFilters);
+
+    } catch (error) {
+        console.error('Error processing balance adjustment:', error);
         handleApiError(error);
     } finally {
         hideLoading();

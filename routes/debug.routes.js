@@ -317,6 +317,99 @@ router.post('/clear-test-fund-balance', authenticateToken, async (req, res) => {
     }
 });
 
+// GET /api/debug/auto-clear-prueba - Limpiar automáticamente el fondo "prueba"
+router.get('/auto-clear-prueba', async (req, res) => {
+    try {
+        console.log('🎯 Auto-limpiando fondo "prueba"...');
+
+        // Buscar el fondo "prueba" específicamente
+        const pruebaFund = await prisma.fund.findFirst({
+            where: {
+                OR: [
+                    { name: { contains: 'prueba', mode: 'insensitive' } },
+                    { code: { contains: 'prueba', mode: 'insensitive' } },
+                    { name: { contains: 'PRUEBA', mode: 'insensitive' } },
+                    { code: { contains: 'PRUEBA', mode: 'insensitive' } }
+                ]
+            }
+        });
+
+        if (!pruebaFund) {
+            return res.json({
+                success: true,
+                message: 'No se encontró ningún fondo llamado "prueba"',
+                data: {
+                    fundFound: false,
+                    balanceCleared: 0
+                }
+            });
+        }
+
+        console.log(`🎯 Fondo encontrado: ${pruebaFund.name} - Saldo: $${pruebaFund.currentBalance}`);
+
+        if (pruebaFund.currentBalance <= 0) {
+            return res.json({
+                success: true,
+                message: `El fondo "${pruebaFund.name}" ya tiene saldo cero`,
+                data: {
+                    fundFound: true,
+                    fundName: pruebaFund.name,
+                    currentBalance: pruebaFund.currentBalance,
+                    balanceCleared: 0,
+                    action: 'no_action_needed'
+                }
+            });
+        }
+
+        // Crear transacción de ajuste para poner el saldo en cero
+        const transaction = await prisma.fundTransaction.create({
+            data: {
+                fundId: pruebaFund.id,
+                type: 'EXPENSE',
+                amount: -pruebaFund.currentBalance,
+                description: `Auto-limpieza de fondo de prueba: ${pruebaFund.name} (ejecutado automáticamente)`,
+                category: 'ADMINISTRATIVE_ADJUSTMENT',
+                performedBy: 'AUTO_SYSTEM'
+            }
+        });
+
+        // Actualizar el fondo
+        const updatedFund = await prisma.fund.update({
+            where: { id: pruebaFund.id },
+            data: {
+                currentBalance: 0,
+                totalExpenses: pruebaFund.totalExpenses + pruebaFund.currentBalance
+            }
+        });
+
+        console.log(`✅ Fondo "${pruebaFund.name}" limpiado exitosamente`);
+
+        res.json({
+            success: true,
+            message: `¡Fondo "${pruebaFund.name}" limpiado exitosamente! Saldo eliminado: $${pruebaFund.currentBalance.toLocaleString()}`,
+            data: {
+                fundFound: true,
+                fundName: pruebaFund.name,
+                fundCode: pruebaFund.code,
+                previousBalance: pruebaFund.currentBalance,
+                newBalance: 0,
+                balanceCleared: pruebaFund.currentBalance,
+                transactionId: transaction.id,
+                action: 'balance_cleared',
+                canDeleteNow: true
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ Error en auto-limpieza:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Error al limpiar automáticamente el fondo prueba',
+            details: error.message
+        });
+    }
+});
+
 // POST /api/debug/create-sample-funds - Crear fondos de ejemplo
 router.post('/create-sample-funds', authenticateToken, async (req, res) => {
     try {

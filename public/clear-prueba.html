@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧹 Auto-Limpiar Fondo Prueba</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.95);
+        }
+        .result-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 20px;
+            font-family: 'Courier New', monospace;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .btn-auto {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            border: none;
+            border-radius: 50px;
+            padding: 15px 30px;
+            font-weight: bold;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        .btn-auto:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            color: white;
+        }
+        .loading {
+            display: none;
+        }
+        .emoji {
+            font-size: 3rem;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8 col-lg-6">
+                <div class="card">
+                    <div class="card-body text-center p-5">
+                        <div class="emoji">🧹</div>
+                        <h1 class="mb-4">Auto-Limpiar Fondo "Prueba"</h1>
+                        <p class="text-muted mb-4">
+                            Esta herramienta buscará automáticamente tu fondo llamado "prueba" 
+                            y eliminará su saldo de $500,000 para que puedas eliminarlo.
+                        </p>
+
+                        <button class="btn btn-auto btn-lg" onclick="autoClearPrueba()">
+                            🚀 Limpiar Automáticamente
+                        </button>
+
+                        <div class="loading mt-3">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Procesando...</span>
+                            </div>
+                            <p class="mt-2">Limpiando fondo...</p>
+                        </div>
+
+                        <div id="results" class="result-box" style="display: none;"></div>
+
+                        <div class="mt-4">
+                            <small class="text-muted">
+                                ⚡ Ejecuta automáticamente en Railway<br>
+                                🎯 Busca fondos con "prueba" en el nombre<br>
+                                💰 Pone el saldo en $0<br>
+                                🗑️ Permite eliminación posterior
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        const API_BASE = window.location.origin;
+        const resultsDiv = document.getElementById('results');
+        const loadingDiv = document.querySelector('.loading');
+
+        function showResults(data) {
+            resultsDiv.style.display = 'block';
+            if (typeof data === 'object') {
+                resultsDiv.textContent = JSON.stringify(data, null, 2);
+            } else {
+                resultsDiv.textContent = data;
+            }
+        }
+
+        function showLoading(show = true) {
+            loadingDiv.style.display = show ? 'block' : 'none';
+        }
+
+        async function autoClearPrueba() {
+            showLoading(true);
+            resultsDiv.style.display = 'none';
+            
+            try {
+                console.log('🚀 Ejecutando auto-limpieza...');
+                
+                const response = await fetch(`${API_BASE}/api/debug/auto-clear-prueba`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    if (data.success) {
+                        let message = `✅ ${data.message}\n\n`;
+                        
+                        if (data.data.fundFound) {
+                            message += `📁 Fondo: ${data.data.fundName}\n`;
+                            if (data.data.fundCode) {
+                                message += `🏷️ Código: ${data.data.fundCode}\n`;
+                            }
+                            if (data.data.previousBalance) {
+                                message += `💰 Saldo anterior: $${data.data.previousBalance.toLocaleString()}\n`;
+                                message += `💰 Saldo nuevo: $${data.data.newBalance.toLocaleString()}\n`;
+                                message += `🧹 Monto limpiado: $${data.data.balanceCleared.toLocaleString()}\n`;
+                            }
+                            if (data.data.transactionId) {
+                                message += `📝 ID Transacción: ${data.data.transactionId}\n`;
+                            }
+                            if (data.data.canDeleteNow) {
+                                message += `\n🎉 ¡LISTO! Ahora puedes eliminar el fondo desde la interfaz web.\n`;
+                                message += `\n📋 Pasos siguientes:\n`;
+                                message += `1. Ve a "Gestión de Fondos"\n`;
+                                message += `2. Busca tu fondo "prueba"\n`;
+                                message += `3. Haz clic en el botón 🗑️ "Eliminar"\n`;
+                                message += `4. Confirma la eliminación\n`;
+                            }
+                        }
+                        
+                        showResults(message);
+                    } else {
+                        showResults(`❌ Error: ${data.error}\n\nDetalles: ${data.details || 'No disponibles'}`);
+                    }
+                } else {
+                    showResults(`❌ Error HTTP ${response.status}: ${data.error || 'Error desconocido'}`);
+                }
+            } catch (error) {
+                showResults(`💥 Error de conexión: ${error.message}\n\nVerifica que el servidor esté funcionando.`);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // Auto-ejecutar al cargar la página si hay parámetro ?auto=true
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('auto') === 'true') {
+                setTimeout(autoClearPrueba, 1000);
+            }
+        });
+    </script>
+</body>
+</html>

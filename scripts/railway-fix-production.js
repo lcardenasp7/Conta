@@ -35,6 +35,14 @@ async function fixRailwayProduction() {
         await prisma.event.deleteMany({});
         console.log('✅ Eventos eliminados');
         
+        // Eliminar matrículas primero (si existe la tabla)
+        try {
+            await prisma.enrollment.deleteMany({});
+            console.log('✅ Matrículas eliminadas');
+        } catch (error) {
+            console.log('ℹ️ Tabla de matrículas no existe o ya está vacía');
+        }
+        
         await prisma.student.deleteMany({});
         console.log('✅ Estudiantes de prueba eliminados');
         

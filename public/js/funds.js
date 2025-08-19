@@ -642,10 +642,7 @@ function clearFundFilters() {
     loadFunds(1, {});
 }
 
-// Export functions for global access
-window.initFunds = initFunds;
-window.loadFunds = loadFunds;
-window.showCreateFundModal = showCreateFundModal;
+// Exportaciones movidas al final del archivo
 
 // View fund details
 async function viewFund(fundId) {
@@ -995,20 +992,8 @@ function exportFunds() {
     showNotification('Función de exportación en desarrollo', 'info');
 }
 
-// Export functions for global access
-window.viewFund = viewFund;
-window.editFund = editFund;
-window.viewFundTransactions = viewFundTransactions;
-window.addFundIncome = addFundIncome;
-window.addFundExpense = addFundExpense;
-window.showTransferModal = showTransferModal;
-window.processTransfer = processTransfer;
-window.showFundStatsModal = showFundStatsModal;
-window.exportFunds = exportFunds;
-window.deleteFund = deleteFund;
-window.toggleFundStatus = toggleFundStatus;
-window.showTransferFromFund = showTransferFromFund;
-window.showBalanceAdjustmentModal = showBalanceAdjustmentModal;
+// Exportaciones movidas al final del archivo
+// Exportaciones movidas al final del archivo
 
 // Delete fund
 async function deleteFund(fundId, fundName) {
@@ -1490,4 +1475,21 @@ async function processBalanceAdjustment(fundId, fundName, currentBalance) {
     } finally {
         hideLoading();
     }
-}
+}// E
+xport all functions for global access
+window.initFunds = initFunds;
+window.loadFunds = loadFunds;
+window.showCreateFundModal = showCreateFundModal;
+window.viewFund = viewFund;
+window.editFund = editFund;
+window.viewFundTransactions = viewFundTransactions;
+window.addFundIncome = addFundIncome;
+window.addFundExpense = addFundExpense;
+window.showTransferModal = showTransferModal;
+window.processTransfer = processTransfer;
+window.showFundStatsModal = showFundStatsModal;
+window.exportFunds = exportFunds;
+window.deleteFund = deleteFund;
+window.toggleFundStatus = toggleFundStatus;
+window.showTransferFromFund = showTransferFromFund;
+window.showBalanceAdjustmentModal = showBalanceAdjustmentModal;

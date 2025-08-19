@@ -399,6 +399,12 @@ async function loadIncomeExpenseChart() {
             ]
         };
 
+        // Asegurar que el canvas esté completamente limpio
+        const canvasId = ctx.id;
+        if (Chart.getChart(canvasId)) {
+            Chart.getChart(canvasId).destroy();
+        }
+
         window.incomeExpenseChart = new Chart(ctx, {
             type: 'line',
             data: data,
@@ -481,6 +487,12 @@ function loadSampleIncomeExpenseChart(ctx) {
         ]
     };
 
+    // Asegurar que el canvas esté completamente limpio
+    const canvasId = ctx.id;
+    if (Chart.getChart(canvasId)) {
+        Chart.getChart(canvasId).destroy();
+    }
+
     window.incomeExpenseChart = new Chart(ctx, {
         type: 'line',
         data: data,
@@ -561,6 +573,12 @@ async function loadIncomeDistributionChart() {
             }]
         };
 
+        // Asegurar que el canvas esté completamente limpio
+        const canvasId = ctx.id;
+        if (Chart.getChart(canvasId)) {
+            Chart.getChart(canvasId).destroy();
+        }
+
         window.incomeDistributionChart = new Chart(ctx, {
             type: 'doughnut',
             data: data,
@@ -625,6 +643,12 @@ function loadSampleIncomeDistributionChart(ctx) {
             borderWidth: 2
         }]
     };
+
+    // Asegurar que el canvas esté completamente limpio
+    const canvasId = ctx.id;
+    if (Chart.getChart(canvasId)) {
+        Chart.getChart(canvasId).destroy();
+    }
 
     window.incomeDistributionChart = new Chart(ctx, {
         type: 'doughnut',

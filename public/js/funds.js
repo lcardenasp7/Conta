@@ -1290,8 +1290,9 @@ async function toggleFundStatus(fundId, currentStatus) {
     } finally {
         hideLoading();
     }
-}// Adminis
-trative balance adjustment
+}
+
+// Administrative balance adjustment
 function showBalanceAdjustmentModal(fundId, fundName, currentBalance) {
     const modalHTML = `
         <div class="modal fade" id="balanceAdjustmentModal" tabindex="-1">
@@ -1475,8 +1476,9 @@ async function processBalanceAdjustment(fundId, fundName, currentBalance) {
     } finally {
         hideLoading();
     }
-}// E
-xport all functions for global access
+}
+
+// Export all functions for global access
 window.initFunds = initFunds;
 window.loadFunds = loadFunds;
 window.showCreateFundModal = showCreateFundModal;

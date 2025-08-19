@@ -381,14 +381,14 @@ class API {
     // Operaciones de dinero en fondos
     async addMoneyToFund(fundId, data) {
         console.log('💰 Adding money to fund:', fundId, data);
-        const response = await this.post(`/funds/${fundId}/add-money`, data);
+        const response = await this.post(`/funds/${fundId}/transactions`, data);
         console.log('✅ Money added successfully');
         return response;
     }
 
     async withdrawMoneyFromFund(fundId, data) {
         console.log('💸 Withdrawing money from fund:', fundId, data);
-        const response = await this.post(`/funds/${fundId}/withdraw-money`, data);
+        const response = await this.post(`/funds/${fundId}/transactions`, data);
         console.log('✅ Money withdrawn successfully');
         return response;
     }
@@ -405,7 +405,7 @@ class API {
     // Estadísticas de fondos
     async getFundStatistics(fundId, period = '30') {
         console.log('📊 Getting fund statistics:', fundId);
-        const response = await this.get(`/funds/${fundId}/statistics?period=${period}`);
+        const response = await this.get(`/funds/${fundId}?period=${period}`);
         console.log('✅ Fund statistics calculated');
         return response.statistics;
     }
@@ -413,7 +413,7 @@ class API {
     // Dashboard de fondos
     async getFundsDashboard() {
         console.log('📊 Getting funds dashboard summary');
-        const response = await this.get('/funds/dashboard/summary');
+        const response = await this.get('/funds');
         console.log('✅ Dashboard summary generated');
         return response.summary;
     }
@@ -426,22 +426,22 @@ class API {
     async getFundLoans(params = {}) {
         console.log('📋 Getting fund loans with params:', params);
         const queryString = new URLSearchParams(params).toString();
-        // Usar la ruta de fondos por ahora
-        const response = await this.get(`/funds/loans${queryString ? '?' + queryString : ''}`);
-        console.log(`✅ Retrieved ${response.loans?.length || 0} loans`);
+        // Usar la ruta correcta del backend limpio
+        const response = await this.get(`/funds/loans/all${queryString ? '?' + queryString : ''}`);
+        console.log(`✅ Retrieved ${response?.length || 0} loans`);
         return response;
     }
 
     async getFundLoan(id) {
         console.log('🔍 Getting fund loan:', id);
-        const response = await this.get(`/fund-loans/${id}`);
+        const response = await this.get(`/funds/loans/${id}`);
         console.log('✅ Loan retrieved with details');
         return response.loan;
     }
 
     async createFundLoan(data) {
         console.log('📝 Creating fund loan:', data);
-        const response = await this.post('/fund-loans', data);
+        const response = await this.post('/funds/loans', data);
         console.log('✅ Loan request created');
         return response;
     }
@@ -449,21 +449,21 @@ class API {
     // Gestión de aprobaciones
     async getPendingLoanApprovals() {
         console.log('⏳ Getting pending loan approvals');
-        const response = await this.get('/fund-loans/pending-approvals');
+        const response = await this.get('/funds/loans/pending-approvals');
         console.log(`✅ Found ${response.loans?.length || 0} pending loans`);
         return response.loans || [];
     }
 
     async approveFundLoan(loanId, data = {}) {
         console.log('✅ Approving fund loan:', loanId);
-        const response = await this.patch(`/fund-loans/${loanId}/approve`, data);
+        const response = await this.patch(`/funds/loans/${loanId}/approve`, data);
         console.log('✅ Loan approved successfully');
         return response.loan;
     }
 
     async rejectFundLoan(loanId, reason) {
         console.log('❌ Rejecting fund loan:', loanId);
-        const response = await this.patch(`/fund-loans/${loanId}/reject`, { reason });
+        const response = await this.patch(`/funds/loans/${loanId}/reject`, { reason });
         console.log('✅ Loan rejected');
         return response.loan;
     }
@@ -471,14 +471,14 @@ class API {
     // Gestión de pagos de préstamos
     async createLoanPayment(loanId, data) {
         console.log('💳 Creating loan payment:', loanId, data);
-        const response = await this.post(`/fund-loans/${loanId}/payments`, data);
+        const response = await this.post(`/funds/loans/${loanId}/payments`, data);
         console.log('✅ Loan payment recorded');
         return response;
     }
 
     async getLoanPaymentHistory(loanId) {
         console.log('📋 Getting loan payment history:', loanId);
-        const response = await this.get(`/fund-loans/${loanId}/payments`);
+        const response = await this.get(`/funds/loans/${loanId}/payments`);
         console.log(`✅ Retrieved ${response.payments?.length || 0} payments`);
         return response;
     }
@@ -486,7 +486,7 @@ class API {
     // Consultas especializadas de préstamos
     async getOverdueLoans() {
         console.log('⚠️ Getting overdue loans');
-        const response = await this.get('/fund-loans/overdue/list');
+        const response = await this.get('/funds/loans/overdue/list');
         console.log(`✅ Found ${response.loans?.length || 0} overdue loans`);
         return response.loans || [];
     }
@@ -494,7 +494,7 @@ class API {
     async getLoanStatistics(fundId = null) {
         console.log('📊 Getting loan statistics');
         const queryParams = fundId ? `?fundId=${fundId}` : '';
-        const response = await this.get(`/fund-loans/statistics/general${queryParams}`);
+        const response = await this.get(`/funds/loans/statistics/general${queryParams}`);
         console.log('✅ Loan statistics calculated');
         return response.statistics;
     }
@@ -502,21 +502,21 @@ class API {
     // Gestión administrativa de préstamos
     async cancelFundLoan(loanId, reason) {
         console.log('🚫 Cancelling fund loan:', loanId);
-        const response = await this.patch(`/fund-loans/${loanId}/cancel`, { reason });
+        const response = await this.patch(`/funds/loans/${loanId}/cancel`, { reason });
         console.log('✅ Loan cancelled');
         return response.loan;
     }
 
     async updateLoanObservations(loanId, observations) {
         console.log('📝 Updating loan observations:', loanId);
-        const response = await this.patch(`/fund-loans/${loanId}/observations`, { observations });
+        const response = await this.patch(`/funds/loans/${loanId}/observations`, { observations });
         console.log('✅ Observations updated');
         return response.loan;
     }
 
     async extendLoanDueDate(loanId, newDueDate, reason) {
         console.log('📅 Extending loan due date:', loanId);
-        const response = await this.patch(`/fund-loans/${loanId}/extend-due-date`, {
+        const response = await this.patch(`/funds/loans/${loanId}/extend-due-date`, {
             newDueDate,
             reason
         });
@@ -529,7 +529,7 @@ class API {
         console.log('📤 Exporting loans to CSV');
         const queryString = new URLSearchParams(params).toString();
         
-        const response = await fetch(`${API_BASE_URL}/fund-loans/export/csv${queryString ? '?' + queryString : ''}`, {
+        const response = await fetch(`${API_BASE_URL}/funds/loans/export/csv${queryString ? '?' + queryString : ''}`, {
             method: 'GET',
             headers: this.getHeaders()
         });
@@ -555,8 +555,8 @@ class API {
     // Sistema de alertas
     async getFundAlertsAttentionRequired() {
         console.log('🚨 Getting fund alerts requiring attention');
-        const response = await this.get('/fund-loans/alerts/attention-required');
-        console.log(`✅ Generated ${response.summary?.totalAlerts || 0} alerts`);
+        const response = await this.get('/funds/alerts/all');
+        console.log(`✅ Retrieved ${response?.length || 0} alerts`);
         return response;
     }
 
@@ -886,7 +886,7 @@ class API {
     // Cambiar estado del fondo
     async toggleFundStatus(fundId, isActive) {
         console.log(`🔄 Cambiando estado del fondo: ${fundId}`);
-        return this.request(`/funds/${fundId}/toggle-status`, {
+        return this.request(`/funds/${fundId}`, {
             method: 'PATCH',
             body: JSON.stringify({ isActive })
         });
@@ -896,7 +896,7 @@ class API {
     // Validar transferencia entre fondos
     async validateTransfer(sourceFundId, targetFundId, amount) {
         console.log(`🔍 Validando transferencia: ${amount} de ${sourceFundId} a ${targetFundId}`);
-        return this.request('/funds/validate-transfer', {
+        return this.request('/funds', {
             method: 'POST',
             body: JSON.stringify({ sourceFundId, targetFundId, amount })
         });

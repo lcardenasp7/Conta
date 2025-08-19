@@ -276,6 +276,12 @@ function getEventStatusText(status) {
 // Load dashboard charts
 async function loadDashboardCharts() {
     try {
+        // Check if Chart.js is available
+        if (typeof Chart === 'undefined') {
+            console.warn('Chart.js is not loaded, skipping chart initialization');
+            return;
+        }
+        
         // Destroy all existing charts first
         destroyAllCharts();
         
@@ -296,13 +302,27 @@ async function loadDashboardCharts() {
 // Destroy all existing charts
 function destroyAllCharts() {
     try {
-        if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
-            window.incomeExpenseChart.destroy();
+        // Destroy income expense chart
+        if (window.incomeExpenseChart) {
+            try {
+                if (typeof window.incomeExpenseChart.destroy === 'function') {
+                    window.incomeExpenseChart.destroy();
+                }
+            } catch (e) {
+                console.log('Error destroying income expense chart:', e);
+            }
             window.incomeExpenseChart = null;
         }
         
-        if (window.incomeDistributionChart && typeof window.incomeDistributionChart.destroy === 'function') {
-            window.incomeDistributionChart.destroy();
+        // Destroy income distribution chart
+        if (window.incomeDistributionChart) {
+            try {
+                if (typeof window.incomeDistributionChart.destroy === 'function') {
+                    window.incomeDistributionChart.destroy();
+                }
+            } catch (e) {
+                console.log('Error destroying income distribution chart:', e);
+            }
             window.incomeDistributionChart = null;
         }
         
@@ -310,8 +330,9 @@ function destroyAllCharts() {
         if (typeof Chart !== 'undefined' && Chart.instances) {
             Object.keys(Chart.instances).forEach(key => {
                 try {
-                    if (Chart.instances[key] && typeof Chart.instances[key].destroy === 'function') {
-                        Chart.instances[key].destroy();
+                    const chartInstance = Chart.instances[key];
+                    if (chartInstance && typeof chartInstance.destroy === 'function') {
+                        chartInstance.destroy();
                     }
                 } catch (e) {
                     console.log('Error destroying chart instance:', e);
@@ -327,11 +348,19 @@ function destroyAllCharts() {
 async function loadIncomeExpenseChart() {
     const ctx = document.getElementById('incomeExpenseChart');
     if (!ctx) return;
+    
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js is not loaded, cannot create income expense chart');
+        return;
+    }
 
     // Destroy existing chart more thoroughly
-    if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
+    if (window.incomeExpenseChart) {
         try {
-            window.incomeExpenseChart.destroy();
+            if (typeof window.incomeExpenseChart.destroy === 'function') {
+                window.incomeExpenseChart.destroy();
+            }
         } catch (e) {
             console.log('Error destroying income expense chart:', e);
         }
@@ -410,10 +439,18 @@ async function loadIncomeExpenseChart() {
 
 // Fallback chart with sample data
 function loadSampleIncomeExpenseChart(ctx) {
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js is not loaded, cannot create sample chart');
+        return;
+    }
+    
     // Destroy existing chart if it exists
-    if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
+    if (window.incomeExpenseChart) {
         try {
-            window.incomeExpenseChart.destroy();
+            if (typeof window.incomeExpenseChart.destroy === 'function') {
+                window.incomeExpenseChart.destroy();
+            }
         } catch (e) {
             console.log('Error destroying sample chart:', e);
         }
@@ -481,11 +518,19 @@ function loadSampleIncomeExpenseChart(ctx) {
 async function loadIncomeDistributionChart() {
     const ctx = document.getElementById('incomeDistributionChart');
     if (!ctx) return;
+    
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js is not loaded, cannot create income distribution chart');
+        return;
+    }
 
     // Destroy existing chart more thoroughly
-    if (window.incomeDistributionChart && typeof window.incomeDistributionChart.destroy === 'function') {
+    if (window.incomeDistributionChart) {
         try {
-            window.incomeDistributionChart.destroy();
+            if (typeof window.incomeDistributionChart.destroy === 'function') {
+                window.incomeDistributionChart.destroy();
+            }
         } catch (e) {
             console.log('Error destroying income distribution chart:', e);
         }
@@ -553,6 +598,12 @@ async function loadIncomeDistributionChart() {
 
 // Fallback chart with sample data
 function loadSampleIncomeDistributionChart(ctx) {
+    // Check if Chart.js is available
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js is not loaded, cannot create sample distribution chart');
+        return;
+    }
+    
     const data = {
         labels: ['Matrículas', 'Mensualidades', 'Eventos', 'Uniformes', 'Otros'],
         datasets: [{

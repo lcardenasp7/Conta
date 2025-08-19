@@ -200,18 +200,18 @@ function renderFundsContent() {
                     </div>
                     <div class="modal-body">
                         <form id="fundForm">
-                            <input type="hidden" id="fundId">
+                            <input type="hidden" id="fundId" name="fundId">
                             <div class="row">
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="fundName" class="form-label">Nombre *</label>
-                                        <input type="text" class="form-control" id="fundName" required>
+                                        <input type="text" class="form-control" id="fundName" name="name" required>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="fundCode" class="form-label">Código *</label>
-                                        <input type="text" class="form-control" id="fundCode" required>
+                                        <input type="text" class="form-control" id="fundCode" name="code" required>
                                     </div>
                                 </div>
                             </div>
@@ -219,7 +219,7 @@ function renderFundsContent() {
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="fundType" class="form-label">Tipo *</label>
-                                        <select class="form-select" id="fundType" required>
+                                        <select class="form-select" id="fundType" name="type" required>
                                             <option value="">Seleccionar tipo</option>
                                             <option value="EVENTS">Eventos</option>
                                             <option value="TUITION">Matrículas</option>
@@ -233,31 +233,31 @@ function renderFundsContent() {
                                 <div class="col-md-6">
                                     <div class="mb-3">
                                         <label for="fundAcademicYear" class="form-label">Año Académico</label>
-                                        <input type="number" class="form-control" id="fundAcademicYear" value="${new Date().getFullYear()}">
+                                        <input type="number" class="form-control" id="fundAcademicYear" name="academicYear" value="${new Date().getFullYear()}">
                                     </div>
                                 </div>
                             </div>
                             <div class="mb-3">
                                 <label for="fundDescription" class="form-label">Descripción</label>
-                                <textarea class="form-control" id="fundDescription" rows="3"></textarea>
+                                <textarea class="form-control" id="fundDescription" name="description" rows="3"></textarea>
                             </div>
                             <div class="row">
                                 <div class="col-md-4">
                                     <div class="mb-3">
                                         <label for="fundInitialBalance" class="form-label">Saldo Inicial</label>
-                                        <input type="number" class="form-control" id="fundInitialBalance" min="0" step="0.01" value="0">
+                                        <input type="number" class="form-control" id="fundInitialBalance" name="initialBalance" min="0" step="0.01" value="0">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="mb-3">
                                         <label for="fundAlertLevel1" class="form-label">Alerta Nivel 1 (%)</label>
-                                        <input type="number" class="form-control" id="fundAlertLevel1" min="0" max="100" value="70">
+                                        <input type="number" class="form-control" id="fundAlertLevel1" name="alertLevel1" min="0" max="100" value="70">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="mb-3">
                                         <label for="fundAlertLevel2" class="form-label">Alerta Nivel 2 (%)</label>
-                                        <input type="number" class="form-control" id="fundAlertLevel2" min="0" max="100" value="85">
+                                        <input type="number" class="form-control" id="fundAlertLevel2" name="alertLevel2" min="0" max="100" value="85">
                                     </div>
                                 </div>
                             </div>
@@ -265,12 +265,12 @@ function renderFundsContent() {
                                 <div class="col-md-4">
                                     <div class="mb-3">
                                         <label for="fundAlertLevel3" class="form-label">Alerta Nivel 3 (%)</label>
-                                        <input type="number" class="form-control" id="fundAlertLevel3" min="0" max="100" value="95">
+                                        <input type="number" class="form-control" id="fundAlertLevel3" name="alertLevel3" min="0" max="100" value="95">
                                     </div>
                                 </div>
                                 <div class="col-md-4">
                                     <div class="mb-3 form-check">
-                                        <input type="checkbox" class="form-check-input" id="fundIsActive" checked>
+                                        <input type="checkbox" class="form-check-input" id="fundIsActive" name="isActive" checked>
                                         <label class="form-check-label" for="fundIsActive">
                                             Fondo Activo
                                         </label>

@@ -295,20 +295,32 @@ async function loadDashboardCharts() {
 
 // Destroy all existing charts
 function destroyAllCharts() {
-    if (window.incomeExpenseChart) {
-        window.incomeExpenseChart.destroy();
-        window.incomeExpenseChart = null;
+    try {
+        if (window.incomeExpenseChart && typeof window.incomeExpenseChart.destroy === 'function') {
+            window.incomeExpenseChart.destroy();
+            window.incomeExpenseChart = null;
+        }
+        
+        if (window.incomeDistributionChart && typeof window.incomeDistributionChart.destroy === 'function') {
+            window.incomeDistributionChart.destroy();
+            window.incomeDistributionChart = null;
+        }
+        
+        // Clear any Chart.js instances from the registry
+        if (typeof Chart !== 'undefined' && Chart.instances) {
+            Object.keys(Chart.instances).forEach(key => {
+                try {
+                    if (Chart.instances[key] && typeof Chart.instances[key].destroy === 'function') {
+                        Chart.instances[key].destroy();
+                    }
+                } catch (e) {
+                    console.log('Error destroying chart instance:', e);
+                }
+            });
+        }
+    } catch (error) {
+        console.log('Error in destroyAllCharts:', error);
     }
-    
-    if (window.incomeDistributionChart) {
-        window.incomeDistributionChart.destroy();
-        window.incomeDistributionChart = null;
-    }
-    
-    // Clear any Chart.js instances from the registry
-    Object.keys(Chart.instances).forEach(key => {
-        Chart.instances[key].destroy();
-    });
 }
 
 // Load income vs expense chart

@@ -168,8 +168,16 @@ async function loadFundAlerts(page = 1, filters = {}) {
             ...filters
         };
         
-        // Usar datos reales de la API
-        const alerts = response || [];
+        // Obtener datos reales de la API
+        let alerts = [];
+        try {
+            const response = await api.getFundAlertsAttentionRequired();
+            alerts = response || [];
+        } catch (apiError) {
+            console.log('Error loading alerts from API:', apiError);
+            // Si no hay API disponible, usar array vacío
+            alerts = [];
+        }
         
         currentFundAlerts = alerts;
         currentFundAlertsPage = 1;

@@ -368,8 +368,8 @@ router.get('/auto-clear-prueba', async (req, res) => {
                 type: 'EXPENSE',
                 amount: -pruebaFund.currentBalance,
                 description: `Auto-limpieza de fondo de prueba: ${pruebaFund.name} (ejecutado automáticamente)`,
-                category: 'ADMINISTRATIVE_ADJUSTMENT',
-                performedBy: 'AUTO_SYSTEM'
+                category: 'ADMINISTRATIVE_ADJUSTMENT'
+                // performedBy es opcional, lo omitimos para evitar errores
             }
         });
 

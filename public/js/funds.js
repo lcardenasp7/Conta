@@ -410,6 +410,9 @@ function updateFundsTable() {
                     <button class="btn btn-outline-danger" onclick="addFundExpense('${fund.id}')" title="Agregar Gasto">
                         <i class="bi bi-dash-circle"></i>
                     </button>
+                    <button class="btn btn-outline-danger" onclick="deleteFund('${fund.id}', '${fund.name}')" title="Eliminar Fondo">
+                        <i class="bi bi-trash"></i>
+                    </button>
                 </div>
             </td>
         </tr>
@@ -1002,3 +1005,300 @@ window.showTransferModal = showTransferModal;
 window.processTransfer = processTransfer;
 window.showFundStatsModal = showFundStatsModal;
 window.exportFunds = exportFunds;
+window.deleteFund = deleteFund;
+window.toggleFundStatus = toggleFundStatus;
+window.showTransferFromFund = showTransferFromFund;
+
+// Delete fund
+async function deleteFund(fundId, fundName) {
+    // Verificar que el fondo existe en la lista actual
+    const fund = currentFunds.find(f => f.id === fundId);
+    if (!fund) {
+        showNotification('Fondo no encontrado', 'error');
+        return;
+    }
+
+    // Verificar si el fondo tiene saldo
+    if (fund.currentBalance > 0) {
+        showNotification('No se puede eliminar un fondo con saldo positivo. Transfiera el dinero a otro fondo primero.', 'error');
+        return;
+    }
+
+    // Verificar si el fondo tiene transacciones
+    if (fund.totalIncome > 0 || fund.totalExpenses > 0) {
+        // Mostrar modal de confirmación especial para fondos con historial
+        showDeleteFundWithHistoryModal(fundId, fundName, fund);
+        return;
+    }
+
+    // Para fondos sin transacciones, mostrar confirmación simple
+    showDeleteFundConfirmation(fundId, fundName, fund);
+}
+
+// Show delete fund confirmation modal
+function showDeleteFundConfirmation(fundId, fundName, fund) {
+    const hasTransactions = fund.totalIncome > 0 || fund.totalExpenses > 0;
+    const warningMessage = hasTransactions 
+        ? `<div class="alert alert-warning">
+            <strong>⚠️ Advertencia:</strong> Este fondo tiene historial de transacciones:
+            <ul class="mb-0 mt-2">
+                <li>Total ingresos: ${formatCurrency(fund.totalIncome)}</li>
+                <li>Total gastos: ${formatCurrency(fund.totalExpenses)}</li>
+                <li>Saldo actual: ${formatCurrency(fund.currentBalance)}</li>
+            </ul>
+            <p class="mt-2 mb-0">Al eliminar el fondo, se perderá todo el historial de transacciones.</p>
+           </div>`
+        : `<div class="alert alert-info">
+            <strong>ℹ️ Información:</strong> Este fondo no tiene transacciones registradas y se puede eliminar de forma segura.
+           </div>`;
+
+    const modalHTML = `
+        <div class="modal fade" id="deleteFundModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header bg-danger text-white">
+                        <h5 class="modal-title">🗑️ Eliminar Fondo</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p><strong>¿Está seguro de que desea eliminar el fondo "${fundName}"?</strong></p>
+                        
+                        ${warningMessage}
+                        
+                        <div class="mt-3">
+                            <p><strong>Información del fondo:</strong></p>
+                            <ul>
+                                <li><strong>Código:</strong> ${fund.code}</li>
+                                <li><strong>Tipo:</strong> ${getFundTypeText(fund.type)}</li>
+                                <li><strong>Estado:</strong> ${fund.isActive ? 'Activo' : 'Inactivo'}</li>
+                                <li><strong>Saldo actual:</strong> ${formatCurrency(fund.currentBalance)}</li>
+                            </ul>
+                        </div>
+
+                        <div class="alert alert-danger mt-3">
+                            <strong>⚠️ Esta acción no se puede deshacer.</strong>
+                        </div>
+
+                        <div class="form-check mt-3">
+                            <input class="form-check-input" type="checkbox" id="confirmDelete">
+                            <label class="form-check-label" for="confirmDelete">
+                                Confirmo que deseo eliminar este fondo permanentemente
+                            </label>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-danger" onclick="confirmDeleteFund('${fundId}', '${fundName}')" disabled id="confirmDeleteBtn">
+                            <i class="bi bi-trash"></i> Eliminar Fondo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('deleteFundModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Setup checkbox handler
+    const checkbox = document.getElementById('confirmDelete');
+    const confirmBtn = document.getElementById('confirmDeleteBtn');
+    
+    checkbox.addEventListener('change', function() {
+        confirmBtn.disabled = !this.checked;
+    });
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('deleteFundModal'));
+    modal.show();
+
+    // Clean up when modal is hidden
+    document.getElementById('deleteFundModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Confirm fund deletion
+async function confirmDeleteFund(fundId, fundName) {
+    const checkbox = document.getElementById('confirmDelete');
+    if (!checkbox.checked) {
+        showNotification('Debe confirmar la eliminación', 'error');
+        return;
+    }
+
+    try {
+        showLoading();
+
+        // Call API to delete fund
+        await api.deleteFund(fundId);
+        
+        showNotification(`Fondo "${fundName}" eliminado exitosamente`, 'success');
+
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('deleteFundModal'));
+        modal.hide();
+
+        // Reload funds list
+        loadFunds(currentFundsPage, currentFundsFilters);
+
+    } catch (error) {
+        console.error('Error deleting fund:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}
+
+// Show delete fund with history modal (for funds with transactions)
+function showDeleteFundWithHistoryModal(fundId, fundName, fund) {
+    const modalHTML = `
+        <div class="modal fade" id="deleteFundHistoryModal" tabindex="-1">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header bg-warning text-dark">
+                        <h5 class="modal-title">⚠️ Fondo con Historial de Transacciones</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-warning">
+                            <h6><strong>No se puede eliminar este fondo</strong></h6>
+                            <p>El fondo "${fundName}" tiene historial de transacciones y no puede ser eliminado directamente.</p>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>📊 Resumen Financiero:</h6>
+                                <ul>
+                                    <li><strong>Total ingresos:</strong> ${formatCurrency(fund.totalIncome)}</li>
+                                    <li><strong>Total gastos:</strong> ${formatCurrency(fund.totalExpenses)}</li>
+                                    <li><strong>Saldo actual:</strong> ${formatCurrency(fund.currentBalance)}</li>
+                                </ul>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>ℹ️ Información del Fondo:</h6>
+                                <ul>
+                                    <li><strong>Código:</strong> ${fund.code}</li>
+                                    <li><strong>Tipo:</strong> ${getFundTypeText(fund.type)}</li>
+                                    <li><strong>Estado:</strong> ${fund.isActive ? 'Activo' : 'Inactivo'}</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info mt-3">
+                            <h6><strong>🔧 Opciones disponibles:</strong></h6>
+                            <ol>
+                                <li><strong>Si el saldo es positivo:</strong> Transfiera el dinero a otro fondo primero</li>
+                                <li><strong>Desactivar el fondo:</strong> Puede desactivarlo para que no aparezca en las operaciones</li>
+                                <li><strong>Contactar administrador:</strong> Para eliminación forzada (se perderá el historial)</li>
+                            </ol>
+                        </div>
+
+                        ${fund.currentBalance > 0 ? `
+                            <div class="alert alert-danger">
+                                <strong>⚠️ Saldo pendiente:</strong> Este fondo tiene un saldo de ${formatCurrency(fund.currentBalance)}. 
+                                Debe transferir este dinero a otro fondo antes de poder eliminarlo.
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        ${fund.currentBalance > 0 ? `
+                            <button type="button" class="btn btn-primary" onclick="showTransferFromFund('${fundId}')">
+                                <i class="bi bi-arrow-right"></i> Transferir Saldo
+                            </button>
+                        ` : ''}
+                        <button type="button" class="btn btn-warning" onclick="toggleFundStatus('${fundId}', ${fund.isActive})">
+                            <i class="bi bi-power"></i> ${fund.isActive ? 'Desactivar' : 'Activar'} Fondo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Remove existing modal if any
+    const existingModal = document.getElementById('deleteFundHistoryModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('deleteFundHistoryModal'));
+    modal.show();
+
+    // Clean up when modal is hidden
+    document.getElementById('deleteFundHistoryModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+// Show transfer modal pre-filled with source fund
+function showTransferFromFund(sourceFundId) {
+    // Close the current modal first
+    const currentModal = bootstrap.Modal.getInstance(document.getElementById('deleteFundHistoryModal'));
+    if (currentModal) {
+        currentModal.hide();
+    }
+
+    // Show transfer modal
+    showTransferModal();
+
+    // Pre-select the source fund
+    setTimeout(() => {
+        const sourceFundSelect = document.getElementById('sourceFund');
+        if (sourceFundSelect) {
+            sourceFundSelect.value = sourceFundId;
+            // Trigger change event to update fund info
+            sourceFundSelect.dispatchEvent(new Event('change'));
+        }
+    }, 100);
+}
+
+// Toggle fund active status
+async function toggleFundStatus(fundId, currentStatus) {
+    const fund = currentFunds.find(f => f.id === fundId);
+    if (!fund) {
+        showNotification('Fondo no encontrado', 'error');
+        return;
+    }
+
+    const newStatus = !currentStatus;
+    const action = newStatus ? 'activar' : 'desactivar';
+
+    try {
+        showLoading();
+
+        // Update fund status
+        await api.updateFund(fundId, { isActive: newStatus });
+        
+        showNotification(`Fondo ${action}do exitosamente`, 'success');
+
+        // Close any open modals
+        const modals = ['deleteFundHistoryModal', 'deleteFundModal'];
+        modals.forEach(modalId => {
+            const modalElement = document.getElementById(modalId);
+            if (modalElement) {
+                const modal = bootstrap.Modal.getInstance(modalElement);
+                if (modal) modal.hide();
+            }
+        });
+
+        // Reload funds list
+        loadFunds(currentFundsPage, currentFundsFilters);
+
+    } catch (error) {
+        console.error('Error updating fund status:', error);
+        handleApiError(error);
+    } finally {
+        hideLoading();
+    }
+}

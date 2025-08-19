@@ -920,6 +920,14 @@ class API {
         });
     }
 
+    // Eliminar fondo
+    async deleteFund(fundId) {
+        console.log('🗑️ Deleting fund:', fundId);
+        return this.request(`/funds/${fundId}`, {
+            method: 'DELETE'
+        });
+    }
+
 }
 
 // Create global API instance
